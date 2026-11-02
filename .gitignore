@@ -32,3 +32,4 @@ dist-ssr/
 .gemini/
 uploads/
 backend/uploads/
+.pgdata/
