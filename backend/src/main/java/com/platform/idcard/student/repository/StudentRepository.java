@@ -20,6 +20,8 @@ public interface StudentRepository extends JpaRepository<Student, UUID> {
 
     Optional<Student> findByIdAndSchoolId(UUID id, UUID schoolId);
 
+    long countBySchoolId(UUID schoolId);
+
     Optional<Student> findBySchoolIdAndAdmissionNumber(UUID schoolId, String admissionNumber);
 
     Optional<Student> findBySchoolIdAndAdmissionNumberIgnoreCase(UUID schoolId, String admissionNumber);

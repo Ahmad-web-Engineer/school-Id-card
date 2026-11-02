@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
-import { LayoutDashboard, School, Users, UserCheck, Palette, PlusCircle, ShoppingBag, CreditCard, FileText } from 'lucide-react';
+import { LayoutDashboard, School, Users, UserCheck, Palette, PlusCircle, ShoppingBag, CreditCard, FileText, BarChart3 } from 'lucide-react';
 import PortalLayout from './PortalLayout';
 
 const schoolNavItems = [
@@ -13,6 +13,7 @@ const schoolNavItems = [
   { label: 'Order History', path: '/school/orders', icon: ShoppingBag },
   { label: 'Payments', path: '/school/payments', icon: CreditCard },
   { label: 'Invoices', path: '/school/invoices', icon: FileText },
+  { label: 'Reports', path: '/school/reports', icon: BarChart3 },
 ];
 
 export default function SchoolLayout() {

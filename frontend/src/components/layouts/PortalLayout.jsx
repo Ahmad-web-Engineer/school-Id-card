@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, LogOut, ChevronRight, Shield, School, Printer } from 'lucide-react';
 import Badge from '../common/Badge';
+import NotificationBell from '../../features/notifications/NotificationBell';
 
 const roleMeta = {
   SUPER_ADMIN: {
@@ -42,14 +43,17 @@ export default function PortalLayout({ role = 'SUPER_ADMIN', navItems = [], chil
           <span className="font-bold text-sm text-slate-900 tracking-tight">{currentRole.title}</span>
           <Badge variant={currentRole.badgeVariant} size="sm">{currentRole.badge}</Badge>
         </div>
-        <button
-          type="button"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          aria-label="Toggle navigation menu"
-          className="p-1.5 rounded-md text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </button>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle navigation menu"
+            className="p-1.5 rounded-md text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
+        </div>
       </header>
 
       {/* Sidebar for Desktop & Mobile Overlay */}
@@ -137,6 +141,7 @@ export default function PortalLayout({ role = 'SUPER_ADMIN', navItems = [], chil
             </span>
           </div>
           <div className="flex items-center gap-4">
+            <NotificationBell />
             <Link
               to="/design-system"
               className="text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-md transition-colors"

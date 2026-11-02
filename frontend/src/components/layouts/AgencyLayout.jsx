@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
-import { LayoutDashboard, Building2, Briefcase, Printer, CheckCircle, Truck, DollarSign } from 'lucide-react';
+import { LayoutDashboard, Building2, Briefcase, Printer, CheckCircle, Truck, DollarSign, BarChart3 } from 'lucide-react';
 import PortalLayout from './PortalLayout';
 
 const agencyNavItems = [
@@ -11,6 +11,7 @@ const agencyNavItems = [
   { label: 'Quality Control', path: '/agency/quality-control', icon: CheckCircle },
   { label: 'Dispatch', path: '/agency/dispatch', icon: Truck },
   { label: 'Settlements', path: '/agency/settlements', icon: DollarSign },
+  { label: 'Performance', path: '/agency/performance', icon: BarChart3 },
 ];
 
 export default function AgencyLayout() {

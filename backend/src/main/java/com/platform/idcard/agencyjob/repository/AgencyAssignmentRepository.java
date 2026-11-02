@@ -18,6 +18,10 @@ public interface AgencyAssignmentRepository extends JpaRepository<AgencyAssignme
 
     List<AgencyAssignment> findAllByOrderId(UUID orderId);
 
+    List<AgencyAssignment> findAllByAgencyId(UUID agencyId);
+
+    long countByAgencyId(UUID agencyId);
+
     Optional<AgencyAssignment> findByIdAndAgencyId(UUID id, UUID agencyId);
 
     boolean existsByAssignmentNumber(String assignmentNumber);

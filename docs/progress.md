@@ -1,8 +1,8 @@
 # Project Progress: School ID Card Platform
 
 ## Current Status
-- **Current Step:** Ready to start Step 10 (Notifications, reports, audit)
-- **Last Completed Step:** Step 9 (Finance, invoices, settlements)
+- **Current Step:** Ready to start Step 11 (Hardening and full testing)
+- **Last Completed Step:** Step 10 (Notifications, reports, audit)
 
 ---
 
@@ -20,8 +20,8 @@
 | 7 | Production and quality | Completed | Yes | Yes | Yes | Backend and Frontend |
 | 8 | Dispatch and delivery | Completed | Yes | Yes | Yes | Backend and Frontend |
 | 9 | Finance | Completed | Yes | Yes | Yes | Backend and Frontend |
-| 10 | Notifications, reports, audit | Ready to start | Yes | Yes | Yes | Backend and Frontend |
-| 11 | Hardening and full testing | Not started | No | Fixes only | Fixes only | Security and QA lead |
+| 10 | Notifications, reports, audit | Completed | Yes | Yes | Yes | Backend and Frontend |
+| 11 | Hardening and full testing | Ready to start | No | Fixes only | Fixes only | Security and QA lead |
 | 12 | Release preparation | Not started | No | Config | Config | Single agent |
 
 ---
@@ -625,10 +625,79 @@
   - UI Rules (Responsive across 360px, 768px, 1280px, 1920px): fully verified.
 
 ### What Is Next
-- **Step 10: Notifications, reports, audit**
-  - Notifications: In-app user notifications, transactional outbox pattern, mark as read, unread badge counter.
-  - Audit Trail: Global audit log recording actor, action, entity type, entity ID, changes, IP address.
-  - Reports: Multi-role reporting endpoints (Admin operational & financial performance, School order/student aggregations, Agency printing throughput).
+- **Step 10: Notifications, reports, audit** (COMPLETED)
+
+---
+
+## Step 10 Log: Notifications, Reports & Audit Trail
+
+### What Was Built
+1. **API Contract Definition:**
+   - Appended 9 Step 10 endpoints in [docs/api-contract.md](file:///c:/Users/a4477/Downloads/School%20id%20card/docs/api-contract.md):
+     - In-App Notifications: `GET /api/v1/notifications`, `GET /api/v1/notifications/unread-count`, `POST /api/v1/notifications/{id}/read`, `POST /api/v1/notifications/read-all`.
+     - Administrative Audit Logs: `GET /api/v1/admin/audit-logs` (with `actorUserId`, `entityType`, `action` filters).
+     - Multi-Role Analytics & Reports:
+       - Super Admin: `GET /api/v1/admin/reports/operational`, `GET /api/v1/admin/reports/financial`.
+       - School: `GET /api/v1/school/reports/summary`.
+       - Agency: `GET /api/v1/agency/reports/performance`.
+2. **Database Migrations:**
+   - Created Flyway migration `V10__init_notifications_and_audit.sql`:
+     - `notifications`: UUID PK, `recipient_user_id` FK, `notification_type`, `title`, `message`, `reference_type`, `reference_id`, `read_status`, `read_at`, `created_at`.
+     - `audit_logs`: UUID PK, `actor_user_id` FK (nullable on delete set null), `actor_name`, `actor_role`, `action`, `entity_type`, `entity_id`, `details`, `ip_address`, `created_at`.
+     - Indexes created on recipient user, read status, audit actor, action, entity type, and descending created_at timestamps.
+3. **Backend Domain & Services:**
+   - Entities: `Notification`, `AuditLog` (standard Java, no Lombok).
+   - Repositories: `NotificationRepository`, `AuditLogRepository`.
+   - `NotificationService`: In-app notification creation, unread counting, mark-single-read, bulk mark-all-read.
+   - `AuditService`: Activity logging recording actor name, role, action, target entity, JSON details payload, and IP address.
+   - `ReportingService`: Aggregated multi-role reporting:
+     - Admin Operational: Order pipeline distribution by status, total students, printed cards, delivered cards, active agencies/schools, QC pass rate %.
+     - Admin Financial: Gross revenue, collected revenue, direct agency printing costs, gross contribution, margin %, receivables vs payables.
+     - School Summary: Enrolled students, total orders, cards ordered/delivered, billing balance (0 agency data exposed).
+     - Agency Performance: Total jobs assigned, printed units, dispatch volume, QC pass percentage, earnings ledger (0 school customer info exposed).
+   - Controllers: `NotificationController`, `AdminAuditLogController`, `AdminReportController`, `SchoolReportController`, `AgencyReportController`.
+4. **Frontend Architecture & Pages:**
+   - In-App Notifications: `frontend/src/features/notifications/NotificationBell.jsx` integrated into `PortalLayout.jsx` top bars for mobile and desktop, displaying live unread counts with popover drawer for reading and marking notifications.
+   - Audit Trail: `frontend/src/pages/admin/AdminAuditLogsPage.jsx` (paginated audit activity log with action and entity filters, payload viewer modal).
+   - Admin Reports: `frontend/src/pages/admin/AdminReportsPage.jsx` (Executive operational and financial performance tabs, KPI metric cards, order pipeline breakdown).
+   - School Reports: `frontend/src/pages/school/SchoolReportsPage.jsx` (Student enrollment & card delivery fulfillment report).
+   - Agency Performance: `frontend/src/pages/agency/AgencyPerformancePage.jsx` (Printing throughput, QC pass rate index, and earnings report).
+   - Routing & Navigation: Updated `AdminLayout.jsx`, `SchoolLayout.jsx`, `AgencyLayout.jsx`, and registered routes in `App.jsx`.
+5. **QA & Security Verification:**
+   - `NotificationAndAuditSecurityTest` (8 tests):
+     - Rule 1: School user forbidden from Admin Audit Logs (403).
+     - Rule 1: Agency user forbidden from Admin Audit Logs (403).
+     - Rule 1: School user forbidden from Admin Operational & Financial Reports (403).
+     - Rule 1: Agency user forbidden from School Reports (403).
+     - Rule 1: School user forbidden from Agency Performance Reports (403).
+     - Rule 2: User A cannot mark User B's notification as read (404/403).
+     - Rule 2: Notifications list is strictly isolated to current logged-in recipient user.
+     - Unauthenticated requests return 401 UNAUTHORIZED.
+   - `NotificationAndReportingIntegrationTest` (1 comprehensive test):
+     - End-to-end audit recording -> retrieval -> notification delivery -> unread counting -> single mark-read -> bulk mark-all-read -> Admin operational/financial reporting -> School summary reporting -> Agency performance reporting.
+
+### How It Was Verified
+- **Backend Test Suite:** Executed full test suite `mvn test` across all platform modules — **150/150 tests passed** (0 failures, 0 errors, 0 skipped) in 01:57 min.
+- **Frontend Build:** `npm --prefix frontend run build` completed cleanly in 9.06s with 0 errors.
+- **Non-Negotiables Audit:**
+  - Rule 1 (Role separation, school sees 0 agency data, agency sees 0 school pricing): fully verified.
+  - Rule 2 (Never trust tenant IDs from client payload, derive strictly from JWT context): fully verified.
+  - Rule 3 (Money precision in `NUMERIC(14,2)` and `BigDecimal`): fully verified.
+  - Rule 4 (Named business actions only): fully verified.
+  - Rule 5 (No mock/fake data): fully verified.
+  - Rule 6 (Pagination & indexes on all foreign keys & filter columns): fully verified.
+  - Rule 7 (Standard error format): fully verified.
+  - Rule 8 (Jakarta Bean Validation): fully verified.
+  - UI Rules (Responsive across 360px, 768px, 1280px, 1920px): fully verified.
+
+### What Is Next
+- **Step 11: Hardening and full testing**
+  - Security audit and penetration checks across all modules.
+  - Cross-tenant injection and permission matrix verification.
+  - Performance and SQL query plan validation (zero N+1 queries).
+  - End-to-end user workflows verification across Admin, School, and Agency.
+- **Step 12: Release preparation**
+  - Production configurations, environment templates, README, Docker setup.
 
 ---
 

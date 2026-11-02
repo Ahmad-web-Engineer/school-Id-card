@@ -1805,4 +1805,178 @@
   ```
 - **Success Response (200 OK):** `AdminSettlementResponse` with status `SETTLED`.
 
+---
+
+## Step 10 Endpoints: Notifications, Reports & Audit Trail
+
+### 1. User: List My Notifications
+- **Path:** `/api/v1/notifications`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`, `SCHOOL`, `PRINTING_AGENCY`
+- **Query Params:** `page`, `size`, `unreadOnly` (boolean, default false)
+- **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "e7b0c952-6029-43c3-b4e8-8a85368a183b",
+        "notificationType": "ORDER_SUBMITTED",
+        "title": "New Order Submitted",
+        "message": "Order ORD-2026-0001 has been submitted for review",
+        "referenceType": "ORDER",
+        "referenceId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+        "read": false,
+        "createdAt": "2026-11-02T10:30:00Z"
+      }
+    ],
+    "pagination": { "page": 0, "size": 10, "totalElements": 1, "totalPages": 1, "last": true }
+  }
+  ```
+
+### 2. User: Get Unread Notification Count
+- **Path:** `/api/v1/notifications/unread-count`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`, `SCHOOL`, `PRINTING_AGENCY`
+- **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "unreadCount": 3
+    }
+  }
+  ```
+
+### 3. User: Mark Notification as Read
+- **Path:** `/api/v1/notifications/{id}/read`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`, `SCHOOL`, `PRINTING_AGENCY` (Recipient owner only)
+- **Success Response (200 OK):** Standard success with updated notification record.
+
+### 4. User: Mark All Notifications as Read
+- **Path:** `/api/v1/notifications/read-all`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`, `SCHOOL`, `PRINTING_AGENCY`
+- **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "data": { "markedReadCount": 3 }
+  }
+  ```
+
+### 5. Admin: List Audit Logs
+- **Path:** `/api/v1/admin/audit-logs`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`
+- **Query Params:** `page`, `size`, `actorUserId`, `entityType`, `action`
+- **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "f51c2812-466c-46d7-9679-af79c618e433",
+        "actorUserId": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "actorName": "Super Admin",
+        "actorRole": "SUPER_ADMIN",
+        "action": "PAYMENT_RECORDED",
+        "entityType": "PAYMENT",
+        "entityId": "PAY-2026-0001",
+        "details": "{\"amount\": 5000.00, \"orderNumber\": \"ORD-2026-0001\"}",
+        "ipAddress": "127.0.0.1",
+        "createdAt": "2026-11-02T10:45:00Z"
+      }
+    ],
+    "pagination": { "page": 0, "size": 20, "totalElements": 1, "totalPages": 1, "last": true }
+  }
+  ```
+
+### 6. Admin: Operational Reports
+- **Path:** `/api/v1/admin/reports/operational`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`
+- **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "totalOrders": 45,
+      "ordersByStatus": { "IN_PRODUCTION": 12, "DELIVERED": 20, "PENDING_REVIEW": 5 },
+      "totalStudents": 15400,
+      "totalCardsPrinted": 12200,
+      "totalCardsDelivered": 11800,
+      "activeAgencies": 4,
+      "activeSchools": 18,
+      "averageQualityPassRate": 98.4
+    }
+  }
+  ```
+
+### 7. Admin: Financial Reports
+- **Path:** `/api/v1/admin/reports/financial`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`
+- **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "grossRevenue": 1250000.00,
+      "collectedRevenue": 950000.00,
+      "agencyDirectCosts": 680000.00,
+      "agencySettledPayouts": 510000.00,
+      "outstandingReceivables": 300000.00,
+      "agencyPendingPayables": 170000.00,
+      "grossContribution": 570000.00,
+      "grossMarginPercentage": 45.6
+    }
+  }
+  ```
+
+### 8. School: Reporting Summary
+- **Path:** `/api/v1/school/reports/summary`
+- **Method:** `GET`
+- **Role / Access:** `SCHOOL` (Current school only, derived from JWT)
+- **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "totalStudents": 1250,
+      "totalOrders": 3,
+      "cardsOrdered": 1250,
+      "cardsDelivered": 1250,
+      "totalBilled": 125000.00,
+      "totalPaid": 125000.00,
+      "outstandingDues": 0.00
+    }
+  }
+  ```
+
+### 9. Agency: Performance Report
+- **Path:** `/api/v1/agency/reports/performance`
+- **Method:** `GET`
+- **Role / Access:** `PRINTING_AGENCY` (Current agency only, derived from JWT)
+- **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "totalJobsAssigned": 8,
+      "totalCardsAssigned": 4500,
+      "totalCardsProduced": 4450,
+      "totalCardsDispatched": 4450,
+      "qcPassedQuantity": 4420,
+      "qcFailedQuantity": 30,
+      "qcPassPercentage": 99.3,
+      "totalEarnings": 222500.00,
+      "settledEarnings": 180000.00,
+      "pendingPayout": 42500.00
+    }
+  }
+  ```
+
+
 

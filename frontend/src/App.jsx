@@ -34,6 +34,10 @@ import AgencyDispatchPage from './pages/agency/AgencyDispatchPage';
 import AdminFinancePage from './pages/admin/AdminFinancePage';
 import SchoolFinancePage from './pages/school/SchoolFinancePage';
 import AgencySettlementsPage from './pages/agency/AgencySettlementsPage';
+import AdminAuditLogsPage from './pages/admin/AdminAuditLogsPage';
+import AdminReportsPage from './pages/admin/AdminReportsPage';
+import SchoolReportsPage from './pages/school/SchoolReportsPage';
+import AgencyPerformancePage from './pages/agency/AgencyPerformancePage';
 
 export default function App() {
   return (
@@ -72,6 +76,8 @@ export default function App() {
           <Route path="quality-control" element={<AdminQualityControlPage />} />
           <Route path="delivery" element={<AdminDeliveryPage />} />
           <Route path="finance" element={<AdminFinancePage />} />
+          <Route path="reports" element={<AdminReportsPage />} />
+          <Route path="audit-logs" element={<AdminAuditLogsPage />} />
           <Route path="*" element={<AdminDashboardPage />} />
         </Route>
       </Route>
@@ -88,6 +94,7 @@ export default function App() {
           <Route path="finance" element={<SchoolFinancePage />} />
           <Route path="payments" element={<SchoolFinancePage />} />
           <Route path="invoices" element={<SchoolFinancePage />} />
+          <Route path="reports" element={<SchoolReportsPage />} />
           <Route path="new-order" element={<OrdersPage />} />
           <Route path="*" element={<SchoolDashboardPage />} />
         </Route>
@@ -108,6 +115,8 @@ export default function App() {
           <Route path="dispatch" element={<AgencyDispatchPage />} />
           <Route path="settlements" element={<AgencySettlementsPage />} />
           <Route path="finance" element={<AgencySettlementsPage />} />
+          <Route path="performance" element={<AgencyPerformancePage />} />
+          <Route path="reports" element={<AgencyPerformancePage />} />
           <Route path="*" element={<AgencyDashboardPage />} />
         </Route>
       </Route>
