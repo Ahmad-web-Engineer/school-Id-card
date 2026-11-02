@@ -23,12 +23,14 @@ import AdminOrderDetailPage from './pages/admin/AdminOrderDetailPage';
 import AdminAssignmentsPage from './pages/admin/AdminAssignmentsPage';
 import AdminProductionPage from './pages/admin/AdminProductionPage';
 import AdminQualityControlPage from './pages/admin/AdminQualityControlPage';
+import AdminDeliveryPage from './pages/admin/AdminDeliveryPage';
 import AgencyJobsPage from './pages/agency/AgencyJobsPage';
 import AgencyJobDetailPage from './pages/agency/AgencyJobDetailPage';
 import AgencyDashboardPage from './pages/agency/AgencyDashboardPage';
 import AgencyProfilePage from './pages/agency/AgencyProfilePage';
 import AgencyProductionPage from './pages/agency/AgencyProductionPage';
 import AgencyQualityPage from './pages/agency/AgencyQualityPage';
+import AgencyDispatchPage from './pages/agency/AgencyDispatchPage';
 
 export default function App() {
   return (
@@ -65,6 +67,7 @@ export default function App() {
           <Route path="assignments" element={<AdminAssignmentsPage />} />
           <Route path="production" element={<AdminProductionPage />} />
           <Route path="quality-control" element={<AdminQualityControlPage />} />
+          <Route path="delivery" element={<AdminDeliveryPage />} />
           <Route path="*" element={<AdminDashboardPage />} />
         </Route>
       </Route>
@@ -95,6 +98,7 @@ export default function App() {
           <Route path="production" element={<AgencyProductionPage />} />
           <Route path="quality-control" element={<AgencyQualityPage />} />
           <Route path="quality" element={<AgencyQualityPage />} />
+          <Route path="dispatch" element={<AgencyDispatchPage />} />
           <Route path="*" element={<AgencyDashboardPage />} />
         </Route>
       </Route>

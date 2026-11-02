@@ -8,6 +8,7 @@ import Badge from '../../components/common/Badge';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorState from '../../components/common/ErrorState';
 import Modal from '../../components/common/Modal';
+import ConfirmDeliveryModal from '../../features/delivery/ConfirmDeliveryModal';
 import { ORDER_STATUSES } from '../../features/orders/ordersConstants';
 import {
   ArrowLeft,
@@ -54,6 +55,7 @@ export default function OrderDetailPage() {
 
   const [studentSearch, setStudentSearch] = useState('');
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
+  const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
   const [actionError, setActionError] = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
 
@@ -76,6 +78,31 @@ export default function OrderDetailPage() {
     queryFn: () => api.get(`/school/orders/${id}/tracking`),
     enabled: !!id,
     retry: false,
+  });
+
+  // Fetch Order Deliveries (Step 8)
+  const { data: deliveriesRes } = useQuery({
+    queryKey: ['school-order-deliveries', id],
+    queryFn: () => api.get(`/school/orders/${id}/deliveries`),
+    enabled: !!id,
+    retry: false,
+  });
+
+  const deliveries = deliveriesRes?.data?.data || [];
+
+  // Confirm Delivery mutation (Step 8)
+  const confirmDeliveryMutation = useMutation({
+    mutationFn: (payload) => api.post(`/school/orders/${id}/confirm-delivery`, payload),
+    onSuccess: () => {
+      setActionSuccess('Delivery confirmed successfully! ID cards marked received.');
+      setIsDeliveryModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['school-order-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['school-order-deliveries', id] });
+      queryClient.invalidateQueries({ queryKey: ['school-order-tracking', id] });
+    },
+    onError: (err) => {
+      setActionError(err.message || 'Failed to confirm delivery receipt.');
+    },
   });
 
   // Submit Draft Order mutation
@@ -201,6 +228,17 @@ export default function OrderDetailPage() {
               Approve Quotation
             </Button>
           )}
+
+          {(order.orderStatus === 'DISPATCHED' || order.orderStatus === 'PARTIALLY_DELIVERED') && (
+            <Button
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => setIsDeliveryModalOpen(true)}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              Confirm Delivery
+            </Button>
+          )}
         </div>
       </div>
 
@@ -324,6 +362,54 @@ export default function OrderDetailPage() {
                 <p className="text-base font-bold text-emerald-600 mt-0.5">{tracking.cardsVerified}</p>
               </div>
             </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Confirmed Delivery Receipts (Step 8) */}
+      {deliveries.length > 0 && (
+        <Card className="p-5 border-emerald-100 bg-gradient-to-r from-emerald-50/30 via-white to-slate-50/30">
+          <div className="flex items-center space-x-2 pb-3 border-b border-emerald-100">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Delivery Receipts & Acknowledged Cards</h3>
+              <p className="text-xs text-slate-500">Official proof of delivery records registered for this order.</p>
+            </div>
+          </div>
+          <div className="mt-3 divide-y divide-slate-100">
+            {deliveries.map((del) => (
+              <div key={del.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-slate-900">{del.deliveryNumber}</span>
+                    <Badge variant="success" size="xs">
+                      {del.deliveryStatus}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-0.5">
+                    Received by <span className="font-medium text-slate-800">{del.receivedBy}</span>
+                    {del.receivedMobile && <span className="font-mono ml-1">({del.receivedMobile})</span>}
+                  </p>
+                  {del.deliveryNotes && (
+                    <p className="text-[11px] text-slate-500 italic mt-0.5">{del.deliveryNotes}</p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <div className="font-bold text-emerald-700 font-mono text-sm">
+                    {del.deliveryQuantity} cards received
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    {new Date(del.deliveredAt).toLocaleDateString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </Card>
       )}
@@ -604,6 +690,17 @@ export default function OrderDetailPage() {
           </p>
         </div>
       </Modal>
+
+      {/* Confirm Delivery Modal */}
+      {isDeliveryModalOpen && (
+        <ConfirmDeliveryModal
+          isOpen={isDeliveryModalOpen}
+          onClose={() => setIsDeliveryModalOpen(false)}
+          order={order}
+          onSubmit={(payload) => confirmDeliveryMutation.mutate(payload)}
+          isSubmitting={confirmDeliveryMutation.isPending}
+        />
+      )}
     </div>
   );
 }

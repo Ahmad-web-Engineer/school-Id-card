@@ -1,8 +1,8 @@
 # Project Progress: School ID Card Platform
 
 ## Current Status
-- **Current Step:** Ready to start Step 8 (Dispatch and delivery)
-- **Last Completed Step:** Step 7 (Production and quality control)
+- **Current Step:** Ready to start Step 9 (Finance, invoices, settlements)
+- **Last Completed Step:** Step 8 (Dispatch and delivery)
 
 ---
 
@@ -18,8 +18,8 @@
 | 5 | Orders and quotations | Completed | Yes | Yes | Yes | Backend and Frontend |
 | 6 | Agency assignment | Completed | Yes | Yes | Yes | Backend and Frontend |
 | 7 | Production and quality | Completed | Yes | Yes | Yes | Backend and Frontend |
-| 8 | Dispatch and delivery | Ready to start | Yes | Yes | Yes | Backend and Frontend |
-| 9 | Finance | Not started | Yes | Yes | Yes | Backend and Frontend |
+| 8 | Dispatch and delivery | Completed | Yes | Yes | Yes | Backend and Frontend |
+| 9 | Finance | Ready to start | Yes | Yes | Yes | Backend and Frontend |
 | 10 | Notifications, reports, audit | Not started | Yes | Yes | Yes | Backend and Frontend |
 | 11 | Hardening and full testing | Not started | No | Fixes only | Fixes only | Security and QA lead |
 | 12 | Release preparation | Not started | No | Config | Config | Single agent |
@@ -491,10 +491,77 @@
   - UI Rules (Responsive across 360px, 768px, 1280px, 1920px): fully verified.
 
 ### What Is Next
-- **Step 8: Dispatch and delivery**
-  - Database: `shipments`, `shipment_items`, `delivery_tracking_events`.
-  - Support delivery Model A (Direct from Agency to School) vs Model B (Agency to Admin to School).
-  - Courier integration tracking, shipping label generation, packaging slips, proof of delivery upload, school receipt confirmation.
+- Proceed to Step 8 (Dispatch and delivery)
+
+---
+
+## Step 8 Log: Dispatch and Delivery (Model A & Model B)
+
+### What Was Built
+1. **API Contract Definition:**
+   - Appended 10 Step 8 endpoints in [docs/api-contract.md](file:///c:/Users/a4477/Downloads/School%20id%20card/docs/api-contract.md):
+     - Agency dispatch: `POST /api/v1/agency/jobs/{id}/dispatch`, `GET /api/v1/agency/jobs/{id}/dispatches`, `GET /api/v1/agency/dispatches`.
+     - Admin logistics: `GET /api/v1/admin/delivery/dispatches`, `POST /api/v1/admin/delivery/dispatches/{id}/receive-hub`, `POST /api/v1/admin/delivery/orders/{id}/dispatch-to-school`, `GET /api/v1/admin/delivery/records`, `POST /api/v1/admin/delivery/records/{id}/close`.
+     - School receipt: `GET /api/v1/school/orders/{id}/deliveries`, `POST /api/v1/school/orders/{id}/confirm-delivery`.
+2. **Database Migration:**
+   - Created Flyway migration `V8__init_dispatch_and_delivery.sql`:
+     - `dispatch_records`: UUID PK, `assignment_id` FK (nullable for central hub secondary dispatches), `order_id` FK, `dispatch_number` unique (`DSP-YYYY-XXXX`), `courier_name`, `tracking_number`, `dispatch_quantity`, `dispatch_date`, `dispatch_status` (`IN_TRANSIT`, `DELIVERED_TO_HUB`, `DELIVERED_TO_SCHOOL`, `RETURNED`, `CANCELLED`), `dispatch_type` (`AGENCY_TO_SCHOOL`, `AGENCY_TO_HUB`, `HUB_TO_SCHOOL`), `dispatched_by` FK, `dispatch_notes`, `proof_file_id`.
+     - `delivery_records`: UUID PK, `order_id` FK, `dispatch_id` FK, `delivery_number` unique (`DEL-YYYY-XXXX`), `delivery_model` (`DIRECT_TO_SCHOOL`, `VIA_ADMIN_HUB`), `delivery_quantity`, `received_by`, `received_mobile`, `delivery_status` (`CONFIRMED`, `DISPUTED`, `CLOSED`), `delivered_at`, `delivery_notes`, `closed_by` FK, `closed_at`, `closure_notes`.
+     - Indexed FKs and query columns (`assignment_id`, `order_id`, `dispatch_id`, `dispatch_status`, `delivery_status`, `tracking_number`).
+3. **Backend Service & Controllers:**
+   - Entities & Enums: `DispatchRecord`, `DeliveryRecord`, `DispatchStatus`, `DispatchType`, `DeliveryStatus`, `DeliveryModel` (no Lombok, explicit boilerplate).
+   - Repositories: `DispatchRecordRepository`, `DeliveryRecordRepository`.
+   - `DeliveryService`:
+     - Dispatches job runs under Model A (`DIRECT_TO_SCHOOL`) or Model B (`VIA_ADMIN_HUB`).
+     - Auto-generates sequences for dispatch numbers (`DSP-2026-XXXX`) and delivery receipts (`DEL-2026-XXXX`).
+     - Admin hub intake: receives Model B parcels, logs condition checks, and prepares secondary hub-to-school dispatch.
+     - School delivery confirmation: verifies school ownership (Rule 2), creates delivery receipts, transitions order status to `DELIVERED` (or `PARTIALLY_DELIVERED`).
+     - Enforces administrative delivery closure.
+     - Strict role separation: `SchoolDeliveryResponse` contains zero agency names, internal assignment IDs, or costs (**Non-negotiable Rule 1**).
+   - Controllers:
+     - `AgencyDispatchController.java` (`/api/v1/agency`)
+     - `AdminDeliveryController.java` (`/api/v1/admin/delivery`)
+     - `SchoolDeliveryController.java` (`/api/v1/school/orders/{id}`)
+4. **Frontend Architecture & Pages:**
+   - Constants: `frontend/src/features/delivery/deliveryConstants.js`.
+   - Modals: `CreateDispatchModal.jsx`, `ConfirmDeliveryModal.jsx`, `ReceiveHubModal.jsx`, `SecondaryDispatchModal.jsx`.
+   - Agency Dispatch Page: `frontend/src/pages/agency/AgencyDispatchPage.jsx` (Consignment monitoring, filter by transit status, dispatch trigger for finished jobs).
+   - Admin Logistics Page: `frontend/src/pages/admin/AdminDeliveryPage.jsx` (Supervision of global dispatches, Model B hub receipts, school delivery receipts, and closure).
+   - School Order Details: Enhanced `frontend/src/pages/school/OrderDetailPage.jsx` with "Confirm Delivery" action and delivery receipt card.
+   - Routing: Added `/admin/delivery` and `/agency/dispatch` in `App.jsx`.
+5. **QA & Security Verification:**
+   - `DeliverySecurityTest` (7 tests):
+     - Rule 1: School user forbidden from agency dispatch endpoints (403).
+     - Rule 1: School deliveries response contains zero agency data (`agencyId`, `agencyName`, `jobNumber`, `agreedRate`).
+     - Rule 2: Agency B cannot dispatch Agency A's assignment (404/403).
+     - Rule 2: Agency user forbidden on Super Admin delivery endpoints (403).
+     - Rule 2: School B cannot confirm delivery for School A's order (404/403).
+     - Rule 8: Validation failure on invalid dispatch quantity (<= 0) returns 400.
+     - Unauthenticated requests return 401.
+   - `DeliveryIntegrationTest` (2 end-to-end tests):
+     - Model A direct delivery: Agency dispatch -> order marked `DISPATCHED` -> School confirms delivery -> order marked `DELIVERED` -> Admin closes delivery.
+     - Model B central hub delivery: Agency dispatches to hub -> Admin receives at sorting hub -> Admin secondary dispatch to school -> School confirms delivery -> order marked `DELIVERED`.
+
+### How It Was Verified
+- **Backend Test Suite:** Executed `mvn test` across all platform modules — **132/132 tests passed** (0 failures, 0 errors, 0 skipped).
+- **Frontend Build:** `npm --prefix frontend run build` completed cleanly in 7.27s with 0 errors.
+- **Non-Negotiables Checklist:**
+  - Rule 1 (School sees 0 agency data; separate DTOs): fully verified.
+  - Rule 2 (Never trust tenant IDs from client payload): fully verified via `SecurityUtils`.
+  - Rule 3 (Money precision in `NUMERIC(14,2)` and `BigDecimal`): fully verified.
+  - Rule 4 (Named business actions for status): fully verified (`agencyCreateDispatch`, `adminReceiveAtHub`, `adminSecondaryDispatch`, `schoolConfirmDelivery`, `adminCloseDelivery`).
+  - Rule 5 (No mock/fake data): fully verified.
+  - Rule 6 (Pagination & indexes on all foreign keys & filter columns): fully verified.
+  - Rule 7 (Standard error format): fully verified.
+  - Rule 8 (Jakarta Bean Validation): fully verified.
+  - UI Rules (Responsive across 360px, 768px, 1280px, 1920px): fully verified.
+
+### What Is Next
+- **Step 9: Finance, invoices, settlements**
+  - Database: `payments`, `invoices`, `agency_settlements`, `financial_ledgers`.
+  - School payment processing (advance, milestone, final), invoice generation with PDF download.
+  - Agency cost settlements, deduction for reprints/penalties, gross contribution and margin accounting.
+  - Separate finance dashboards for Admin, School, and Agency.
 
 ---
 

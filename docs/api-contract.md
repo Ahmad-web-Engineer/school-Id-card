@@ -1497,3 +1497,148 @@
     "timestamp": "2026-11-02T11:15:00Z"
   }
   ```
+
+---
+
+## Step 8 Endpoints: Dispatch and Delivery (Model A & Model B)
+
+### 1. Agency: Create Dispatch Record
+- **Path:** `/api/v1/agency/jobs/{id}/dispatch`
+- **Method:** `POST`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Access Rule:** Checks `assignment.agency_id == caller.agency_id`. Verifies assignment is in `AGENCY_ACCEPTED`, `IN_PRODUCTION`, or `PRINTING_COMPLETED`.
+- **Request Body:**
+  ```json
+  {
+    "courierName": "BlueDart Express",
+    "trackingNumber": "BLUD-884920491",
+    "dispatchQuantity": 300,
+    "dispatchNotes": "Packed in 3 sealed boxes with bubble wrap protection"
+  }
+  ```
+- **Success Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "dsp1-0000-0000-0000-000000000001",
+      "assignmentId": "asgn-0000-0000-0000-000000000001",
+      "jobNumber": "JOB-2026-0001",
+      "dispatchNumber": "DSP-2026-0001",
+      "courierName": "BlueDart Express",
+      "trackingNumber": "BLUD-884920491",
+      "dispatchQuantity": 300,
+      "dispatchStatus": "IN_TRANSIT",
+      "dispatchDate": "2026-11-02T12:00:00Z",
+      "dispatchNotes": "Packed in 3 sealed boxes with bubble wrap protection"
+    }
+  }
+  ```
+
+### 2. Agency: List Own Dispatches
+- **Path:** `/api/v1/agency/dispatches`
+- **Method:** `GET`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Query Params:** `page` (default 0), `size` (default 10), `status` (optional)
+- **Access Rule:** Scoped strictly to authenticated `caller.agency_id`.
+
+### 3. Agency: List Dispatches for a Specific Job
+- **Path:** `/api/v1/agency/jobs/{id}/dispatches`
+- **Method:** `GET`
+- **Role / Access:** `PRINTING_AGENCY`
+
+### 4. Admin: List All Global Dispatches
+- **Path:** `/api/v1/admin/delivery/dispatches`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`
+- **Query Params:** `page`, `size`, `agencyId`, `status`, `deliveryModel`
+- **Success Response (200 OK):** `PagedResponse<AdminDispatchResponse>` containing full agency and school information.
+
+### 5. Admin: Receive Consignment at Central Hub (Model B)
+- **Path:** `/api/v1/admin/delivery/dispatches/{id}/receive-hub`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`
+- **Request Body:**
+  ```json
+  {
+    "receivedQuantity": 300,
+    "conditionStatus": "EXCELLENT",
+    "hubNotes": "All 3 boxes received sealed. Quality audit passed at hub."
+  }
+  ```
+- **Success Response (200 OK):** `AdminDispatchResponse` with `dispatchStatus` = `DELIVERED_TO_HUB`.
+
+### 6. Admin: Dispatch From Hub to School (Model B Secondary Dispatch)
+- **Path:** `/api/v1/admin/orders/{id}/dispatch-to-school`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`
+- **Request Body:**
+  ```json
+  {
+    "courierName": "Delhivery Secure",
+    "trackingNumber": "DELH-9923184",
+    "dispatchQuantity": 300,
+    "notes": "Secondary dispatch from Central Hub to School premises"
+  }
+  ```
+- **Success Response (201 Created):** `AdminDispatchResponse`.
+
+### 7. School: View Order Deliveries & Dispatches
+- **Path:** `/api/v1/school/orders/{id}/deliveries`
+- **Method:** `GET`
+- **Role / Access:** `SCHOOL`
+- **Access Rule:** Checks `order.school_id == caller.school_id`.
+- **Rule 1 Guarantee:** Returns courier name, tracking number, quantity dispatched, dispatch date, and delivery receipts. ZERO agency name, cost, or internal job number is returned.
+
+### 8. School: Confirm Delivery Receipt
+- **Path:** `/api/v1/school/orders/{id}/confirm-delivery`
+- **Method:** `POST`
+- **Role / Access:** `SCHOOL`
+- **Access Rule:** Checks `order.school_id == caller.school_id`.
+- **Request Body:**
+  ```json
+  {
+    "receivedQuantity": 300,
+    "receivedBy": "Principal Dr. Rajesh Sharma",
+    "receivedMobile": "+91 98765 43210",
+    "deliveryNotes": "Package inspected and all 300 student cards received in perfect condition."
+  }
+  ```
+- **Success Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "del1-0000-0000-0000-000000000001",
+      "orderId": "ord1-0000-0000-0000-000000000001",
+      "orderNumber": "ORD-2026-0001",
+      "deliveryNumber": "DEL-2026-0001",
+      "deliveryModel": "DIRECT_TO_SCHOOL",
+      "deliveryQuantity": 300,
+      "receivedBy": "Principal Dr. Rajesh Sharma",
+      "receivedMobile": "+91 98765 43210",
+      "deliveryStatus": "CONFIRMED",
+      "deliveredAt": "2026-11-02T14:30:00Z",
+      "deliveryNotes": "Package inspected and all 300 student cards received in perfect condition."
+    }
+  }
+  ```
+
+### 9. Admin: List All Delivery Records
+- **Path:** `/api/v1/admin/delivery/records`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`
+- **Query Params:** `page`, `size`, `schoolId`, `status`
+
+### 10. Admin: Close Delivery Record
+- **Path:** `/api/v1/admin/delivery/records/{id}/close`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`
+- **Request Body:**
+  ```json
+  {
+    "closureNotes": "Verified receipt with school principal. Delivery cycle concluded."
+  }
+  ```
+- **Success Response (200 OK):** `AdminDeliveryResponse` with status `CLOSED`.
+
