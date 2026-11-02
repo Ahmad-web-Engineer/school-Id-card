@@ -31,6 +31,9 @@ import AgencyProfilePage from './pages/agency/AgencyProfilePage';
 import AgencyProductionPage from './pages/agency/AgencyProductionPage';
 import AgencyQualityPage from './pages/agency/AgencyQualityPage';
 import AgencyDispatchPage from './pages/agency/AgencyDispatchPage';
+import AdminFinancePage from './pages/admin/AdminFinancePage';
+import SchoolFinancePage from './pages/school/SchoolFinancePage';
+import AgencySettlementsPage from './pages/agency/AgencySettlementsPage';
 
 export default function App() {
   return (
@@ -68,6 +71,7 @@ export default function App() {
           <Route path="production" element={<AdminProductionPage />} />
           <Route path="quality-control" element={<AdminQualityControlPage />} />
           <Route path="delivery" element={<AdminDeliveryPage />} />
+          <Route path="finance" element={<AdminFinancePage />} />
           <Route path="*" element={<AdminDashboardPage />} />
         </Route>
       </Route>
@@ -81,6 +85,9 @@ export default function App() {
           <Route path="templates" element={<SchoolTemplatesPage />} />
           <Route path="orders" element={<OrdersPage />} />
           <Route path="orders/:id" element={<OrderDetailPage />} />
+          <Route path="finance" element={<SchoolFinancePage />} />
+          <Route path="payments" element={<SchoolFinancePage />} />
+          <Route path="invoices" element={<SchoolFinancePage />} />
           <Route path="new-order" element={<OrdersPage />} />
           <Route path="*" element={<SchoolDashboardPage />} />
         </Route>
@@ -99,6 +106,8 @@ export default function App() {
           <Route path="quality-control" element={<AgencyQualityPage />} />
           <Route path="quality" element={<AgencyQualityPage />} />
           <Route path="dispatch" element={<AgencyDispatchPage />} />
+          <Route path="settlements" element={<AgencySettlementsPage />} />
+          <Route path="finance" element={<AgencySettlementsPage />} />
           <Route path="*" element={<AgencyDashboardPage />} />
         </Route>
       </Route>

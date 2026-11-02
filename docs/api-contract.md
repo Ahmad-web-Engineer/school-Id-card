@@ -1642,3 +1642,167 @@
   ```
 - **Success Response (200 OK):** `AdminDeliveryResponse` with status `CLOSED`.
 
+---
+
+## Step 9 Endpoints: Finance, Invoices, Payments & Settlements
+
+### 1. School: Financial Summary & Ledger
+- **Path:** `/api/v1/school/finance/summary`
+- **Method:** `GET`
+- **Role / Access:** `SCHOOL`
+- **Access Rule:** Scoped strictly to authenticated `caller.school_id`.
+- **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "totalInvoiced": 75000.00,
+      "totalPaid": 50000.00,
+      "outstandingBalance": 25000.00,
+      "invoiceCount": 3,
+      "paymentCount": 4
+    }
+  }
+  ```
+
+### 2. School: List Invoices
+- **Path:** `/api/v1/school/finance/invoices`
+- **Method:** `GET`
+- **Role / Access:** `SCHOOL`
+- **Query Params:** `page` (default 0), `size` (default 10), `status` (optional)
+- **Success Response (200 OK):** `PagedResponse<SchoolInvoiceResponse>`. Zero agency data leaked.
+
+### 3. School: Get Invoice Details
+- **Path:** `/api/v1/school/finance/invoices/{id}`
+- **Method:** `GET`
+- **Role / Access:** `SCHOOL`
+- **Access Rule:** Checks `invoice.school_id == caller.school_id`.
+
+### 4. School: Record Payment
+- **Path:** `/api/v1/school/orders/{id}/payments`
+- **Method:** `POST`
+- **Role / Access:** `SCHOOL`
+- **Access Rule:** Checks `order.school_id == caller.school_id`.
+- **Request Body:**
+  ```json
+  {
+    "amount": 25000.00,
+    "paymentMethod": "UPI",
+    "transactionReference": "UPI/2026/89823104",
+    "paymentNotes": "Advance 50% payment for Order ORD-2026-0001"
+  }
+  ```
+- **Success Response (201 Created):** `SchoolPaymentResponse`.
+
+### 5. Agency: Financial Summary
+- **Path:** `/api/v1/agency/finance/summary`
+- **Method:** `GET`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Access Rule:** Scoped strictly to authenticated `caller.agency_id`.
+- **Rule 1 Guarantee:** Returns only agency agreed payouts, deductions, and settled amounts. ZERO school selling prices or platform margins are exposed.
+- **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "totalAgreedAmount": 60000.00,
+      "totalDeductions": 1200.00,
+      "totalPayableAmount": 58800.00,
+      "totalPaidAmount": 40000.00,
+      "outstandingPayable": 18800.00,
+      "settlementCount": 5
+    }
+  }
+  ```
+
+### 6. Agency: List Settlements
+- **Path:** `/api/v1/agency/finance/settlements`
+- **Method:** `GET`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Query Params:** `page`, `size`, `status`
+- **Success Response (200 OK):** `PagedResponse<AgencySettlementResponse>`.
+
+### 7. Admin: Global Financial Metrics (Platform P&L)
+- **Path:** `/api/v1/admin/finance/summary`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`
+- **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "grossRevenue": 250000.00,
+      "collectedRevenue": 190000.00,
+      "outstandingReceivables": 60000.00,
+      "agencyDirectCost": 120000.00,
+      "agencySettledPayouts": 90000.00,
+      "agencyPendingPayables": 30000.00,
+      "grossContribution": 130000.00,
+      "grossMarginPercentage": 52.00
+    }
+  }
+  ```
+
+### 8. Admin: Generate Order Invoice
+- **Path:** `/api/v1/admin/orders/{id}/invoices`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`
+- **Request Body:**
+  ```json
+  {
+    "dueDate": "2026-11-20",
+    "notes": "Official tax invoice with 18% GST"
+  }
+  ```
+- **Success Response (201 Created):** `AdminInvoiceResponse`.
+
+### 9. Admin: List Global Invoices
+- **Path:** `/api/v1/admin/finance/invoices`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`
+- **Query Params:** `page`, `size`, `schoolId`, `status`
+
+### 10. Admin: Record Manual Payment
+- **Path:** `/api/v1/admin/orders/{id}/payments`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`
+- **Request Body:**
+  ```json
+  {
+    "amount": 25000.00,
+    "paymentMethod": "BANK_TRANSFER",
+    "transactionReference": "UTR9923847192",
+    "paymentNotes": "Cheque cleared into HDFC main account"
+  }
+  ```
+- **Success Response (201 Created):** `AdminPaymentResponse`.
+
+### 11. Admin: Generate Agency Settlement
+- **Path:** `/api/v1/admin/assignments/{id}/settlement`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`
+- **Request Body:**
+  ```json
+  {
+    "deductionAmount": 500.00,
+    "penaltyAmount": 0.00,
+    "notes": "Deduction for 10 defective cards reprinted under agency liability"
+  }
+  ```
+- **Success Response (201 Created):** `AdminSettlementResponse`.
+
+### 12. Admin: Pay Agency Settlement
+- **Path:** `/api/v1/admin/finance/settlements/{id}/pay`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`
+- **Request Body:**
+  ```json
+  {
+    "amount": 18800.00,
+    "paymentReference": "BANK-NEFT-8839210",
+    "notes": "Final payout via NEFT transfer"
+  }
+  ```
+- **Success Response (200 OK):** `AdminSettlementResponse` with status `SETTLED`.
+
+

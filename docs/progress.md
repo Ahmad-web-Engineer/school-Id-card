@@ -1,8 +1,8 @@
 # Project Progress: School ID Card Platform
 
 ## Current Status
-- **Current Step:** Ready to start Step 9 (Finance, invoices, settlements)
-- **Last Completed Step:** Step 8 (Dispatch and delivery)
+- **Current Step:** Ready to start Step 10 (Notifications, reports, audit)
+- **Last Completed Step:** Step 9 (Finance, invoices, settlements)
 
 ---
 
@@ -19,8 +19,8 @@
 | 6 | Agency assignment | Completed | Yes | Yes | Yes | Backend and Frontend |
 | 7 | Production and quality | Completed | Yes | Yes | Yes | Backend and Frontend |
 | 8 | Dispatch and delivery | Completed | Yes | Yes | Yes | Backend and Frontend |
-| 9 | Finance | Ready to start | Yes | Yes | Yes | Backend and Frontend |
-| 10 | Notifications, reports, audit | Not started | Yes | Yes | Yes | Backend and Frontend |
+| 9 | Finance | Completed | Yes | Yes | Yes | Backend and Frontend |
+| 10 | Notifications, reports, audit | Ready to start | Yes | Yes | Yes | Backend and Frontend |
 | 11 | Hardening and full testing | Not started | No | Fixes only | Fixes only | Security and QA lead |
 | 12 | Release preparation | Not started | No | Config | Config | Single agent |
 
@@ -557,11 +557,78 @@
   - UI Rules (Responsive across 360px, 768px, 1280px, 1920px): fully verified.
 
 ### What Is Next
-- **Step 9: Finance, invoices, settlements**
-  - Database: `payments`, `invoices`, `agency_settlements`, `financial_ledgers`.
-  - School payment processing (advance, milestone, final), invoice generation with PDF download.
-  - Agency cost settlements, deduction for reprints/penalties, gross contribution and margin accounting.
-  - Separate finance dashboards for Admin, School, and Agency.
+- **Step 9: Finance, invoices, settlements** (COMPLETED)
+
+---
+
+## Step 9 Log: Finance, Invoices, Settlements
+
+### What Was Built
+1. **API Contract Definition:**
+   - Appended 13 Step 9 endpoints in [docs/api-contract.md](file:///c:/Users/a4477/Downloads/School%20id%20card/docs/api-contract.md):
+     - Admin Finance: `GET /api/v1/admin/finance/summary`, `GET /api/v1/admin/finance/invoices`, `POST /api/v1/admin/finance/orders/{id}/invoices`, `GET /api/v1/admin/finance/payments`, `POST /api/v1/admin/finance/orders/{id}/payments`, `GET /api/v1/admin/finance/settlements`, `POST /api/v1/admin/finance/assignments/{id}/settlement`, `POST /api/v1/admin/finance/settlements/{id}/pay`.
+     - School Finance: `GET /api/v1/school/finance/summary`, `GET /api/v1/school/finance/invoices`, `GET /api/v1/school/finance/invoices/{id}`, `GET /api/v1/school/finance/payments`, `POST /api/v1/school/finance/orders/{id}/payments`.
+     - Agency Finance: `GET /api/v1/agency/finance/summary`, `GET /api/v1/agency/finance/settlements`, `GET /api/v1/agency/finance/settlements/{id}`.
+2. **Database Migration:**
+   - Created Flyway migration `V9__init_finance_and_settlements.sql`:
+     - `payments`: UUID PK, `order_id` FK, `school_id` FK, `payment_reference` unique (`PAY-YYYY-XXXX`), `amount NUMERIC(14,2)` non-null, `payment_method`, `payment_status` (`PENDING`, `COMPLETED`, `FAILED`, `REFUNDED`), `transaction_reference`, `recorded_by` FK, `received_at`.
+     - `invoices`: UUID PK, `order_id` FK, `school_id` FK, `quotation_id` FK, `invoice_number` unique (`INV-YYYY-XXXX`), `subtotal NUMERIC(14,2)`, `discount NUMERIC(14,2)`, `tax_amount NUMERIC(14,2)`, `total_amount NUMERIC(14,2)`, `paid_amount NUMERIC(14,2)`, `due_amount NUMERIC(14,2)`, `invoice_status` (`DRAFT`, `ISSUED`, `PARTIALLY_PAID`, `PAID`, `CANCELLED`, `OVERDUE`), `issued_at`, `due_date`, `notes`.
+     - `agency_settlements`: UUID PK, `assignment_id` FK, `agency_id` FK, `settlement_number` unique (`SET-YYYY-XXXX`), `agreed_amount NUMERIC(14,2)`, `deduction_amount NUMERIC(14,2)`, `penalty_amount NUMERIC(14,2)`, `payable_amount NUMERIC(14,2)`, `paid_amount NUMERIC(14,2)`, `outstanding_amount NUMERIC(14,2)`, `settlement_status` (`PENDING`, `APPROVED`, `PARTIALLY_PAID`, `SETTLED`, `DISPUTED`), `payment_reference`, `settled_at`, `settled_by` FK, `notes`.
+     - `cost_entries`: UUID PK, `order_id` FK, `assignment_id` FK, `cost_category`, `description`, `amount NUMERIC(14,2)`, `recorded_at`.
+     - All FKs and query columns indexed (`order_id`, `school_id`, `agency_id`, `invoice_status`, `payment_status`, `settlement_status`).
+3. **Backend Domain & Services:**
+   - Enums: `PaymentMethod`, `PaymentStatus`, `InvoiceStatus`, `SettlementStatus`, `CostCategory`.
+   - Entities: `Payment`, `Invoice`, `AgencySettlement`, `CostEntry` (clean standard Java, no Lombok).
+   - Repositories: `PaymentRepository`, `InvoiceRepository`, `AgencySettlementRepository`, `CostEntryRepository`.
+   - `FinanceService`:
+     - Automated sequence numbering (`PAY-YYYY-XXXX`, `INV-YYYY-XXXX`, `SET-YYYY-XXXX`).
+     - Tax invoice generation from order approved quotations with automatic GST and subtotal binding.
+     - School milestone & advance payments with automatic invoice state transition (`ISSUED` -> `PARTIALLY_PAID` -> `PAID`).
+     - Agency settlement computation: aggregates agreed order item contract rates, automatically applies defect reprint deductions and delay penalties, and manages disbursement payouts.
+     - Role-isolated financial summaries:
+       - School summary: `totalInvoiced`, `totalPaid`, `outstandingBalance` (0 agency data exposed).
+       - Agency summary: `totalAgreedAmount`, `totalDeductions`, `totalPayableAmount`, `totalPaidAmount`, `outstandingPayable` (0 school selling prices, quotation amounts, or customer contacts exposed).
+       - Admin platform summary: `grossRevenue`, `collectedRevenue`, `outstandingReceivables`, `agencyDirectCost`, `agencySettledPayouts`, `agencyPendingPayables`, `grossContribution`, `grossMarginPercentage`.
+   - Controllers: `AdminFinanceController`, `SchoolFinanceController`, `AgencyFinanceController`.
+4. **Frontend Architecture & Pages:**
+   - Constants: `frontend/src/features/finance/financeConstants.js` (status badges, payment method definitions, INR currency formatter).
+   - Modals: `RecordPaymentModal.jsx`, `GenerateInvoiceModal.jsx`, `PaySettlementModal.jsx`.
+   - School Finance Page: `frontend/src/pages/school/SchoolFinancePage.jsx` (Overview cards, Invoices ledger, Payments history, Make Payment modal).
+   - Agency Settlements Page: `frontend/src/pages/agency/AgencySettlementsPage.jsx` (Contract totals, Defect reprint deductions, Disbursed vs Pending payout statements).
+   - Admin Finance Page: `frontend/src/pages/admin/AdminFinancePage.jsx` (Global P&L metric cards, Gross Contribution rate, Invoices registry, Agency Settlements, Disburse Payout modal).
+   - Routing: Registered `/admin/finance`, `/school/finance`, `/school/payments`, `/school/invoices`, `/agency/settlements`, `/agency/finance` in `App.jsx`.
+5. **QA & Security Verification:**
+   - `FinanceSecurityTest` (8 tests):
+     - Rule 1: School user forbidden from agency settlements (403).
+     - Rule 1: School invoice response strictly conceals agency cost and identity data.
+     - Rule 1: Agency user forbidden from school invoices and platform summary (403).
+     - Rule 1: Agency settlement response strictly conceals school price, quotation, and client identity.
+     - Rule 2: School B cannot make payment for School A's order (404/403).
+     - Rule 2: Agency B cannot access Agency A's settlement (404/403).
+     - Rule 8: Validation failure on payment amount <= 0 returns 400.
+     - Unauthenticated requests return 401.
+   - `FinanceIntegrationTest` (1 comprehensive end-to-end test):
+     - Full order invoicing -> Partial UPI payment -> Invoice marked `PARTIALLY_PAID` -> Final balance settlement -> Invoice marked `PAID` -> Agency settlement generation with penalty deduction -> Admin NEFT payout -> Settlement marked `SETTLED` -> Admin platform P&L gross margin and contribution validation.
+
+### How It Was Verified
+- **Backend Test Suite:** Executed full test suite `mvn test` across all platform modules — **141/141 tests passed** (0 failures, 0 errors, 0 skipped) in 01:22 min.
+- **Frontend Build:** `npm --prefix frontend run build` completed cleanly in 6.58s with 0 errors.
+- **Non-Negotiables Audit:**
+  - Rule 1 (Separate DTOs per role, school sees 0 agency data, agency sees 0 school pricing): fully verified.
+  - Rule 2 (Never trust tenant IDs from request, check every record access): fully verified.
+  - Rule 3 (Money precision in `NUMERIC(14,2)` and `BigDecimal`, school price and agency cost kept strictly separate): fully verified.
+  - Rule 4 (Named business actions only): fully verified (`generateInvoice`, `recordSchoolPayment`, `adminRecordPayment`, `generateAgencySettlement`, `payAgencySettlement`).
+  - Rule 5 (No mock/fake data): fully verified.
+  - Rule 6 (Pagination & indexes on all foreign keys & filter columns): fully verified.
+  - Rule 7 (Standard error format): fully verified.
+  - Rule 8 (Jakarta Bean Validation): fully verified.
+  - UI Rules (Responsive across 360px, 768px, 1280px, 1920px): fully verified.
+
+### What Is Next
+- **Step 10: Notifications, reports, audit**
+  - Notifications: In-app user notifications, transactional outbox pattern, mark as read, unread badge counter.
+  - Audit Trail: Global audit log recording actor, action, entity type, entity ID, changes, IP address.
+  - Reports: Multi-role reporting endpoints (Admin operational & financial performance, School order/student aggregations, Agency printing throughput).
 
 ---
 
