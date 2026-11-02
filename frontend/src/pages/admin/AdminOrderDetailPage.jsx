@@ -31,8 +31,11 @@ import {
   XCircle,
   Calculator,
   Plus,
-  Trash2
+  Trash2,
+  Briefcase
 } from 'lucide-react';
+import AssignAgencyModal from '../../features/assignments/AssignAgencyModal';
+import { ASSIGNMENT_STATUSES } from '../../features/assignments/assignmentsConstants';
 
 export default function AdminOrderDetailPage() {
   const { id } = useParams();
@@ -42,6 +45,9 @@ export default function AdminOrderDetailPage() {
   const [studentSearch, setStudentSearch] = useState('');
   const [actionError, setActionError] = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
+
+  // Assignment Modal State
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
 
   // Correction Modal State
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
@@ -63,6 +69,13 @@ export default function AdminOrderDetailPage() {
   } = useQuery({
     queryKey: ['admin-order-detail', id],
     queryFn: () => api.get(`/admin/orders/${id}`),
+    enabled: !!id,
+  });
+
+  // Fetch Child Agency Assignments
+  const { data: assignmentsRes } = useQuery({
+    queryKey: ['admin-order-assignments', id],
+    queryFn: () => api.get('/admin/assignments', { params: { orderId: id, page: 0, size: 50 } }),
     enabled: !!id,
   });
 
@@ -277,6 +290,16 @@ export default function AdminOrderDetailPage() {
             >
               <Calculator className="h-4 w-4 mr-1.5" />
               {order.orderStatus === 'QUOTATION_GENERATED' ? 'Regenerate Quotation' : 'Generate Quotation'}
+            </Button>
+          )}
+          {['APPROVED', 'AWAITING_ASSIGNMENT', 'ASSIGNED'].includes(order.orderStatus) && (
+            <Button
+              size="sm"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              onClick={() => setIsAssignModalOpen(true)}
+            >
+              <Briefcase className="h-4 w-4 mr-1.5" />
+              Assign to Agency
             </Button>
           )}
         </div>
@@ -582,6 +605,7 @@ export default function AdminOrderDetailPage() {
         </div>
       </Modal>
 
+
       {/* Generate Quotation Modal */}
       <Modal
         isOpen={isQuotationModalOpen}
@@ -700,6 +724,20 @@ export default function AdminOrderDetailPage() {
           </div>
         </div>
       </Modal>
+
+
+      {order && (
+        <AssignAgencyModal
+          isOpen={isAssignModalOpen}
+          onClose={() => setIsAssignModalOpen(false)}
+          order={order}
+          onSuccess={() => {
+            setActionSuccess('Order successfully assigned to agency!');
+            queryClient.invalidateQueries({ queryKey: ['admin-order-detail', id] });
+            queryClient.invalidateQueries({ queryKey: ['admin-order-assignments', id] });
+          }}
+        />
+      )}
     </div>
   );
 }

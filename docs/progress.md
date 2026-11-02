@@ -1,8 +1,8 @@
 # Project Progress: School ID Card Platform
 
 ## Current Status
-- **Current Step:** Ready to start Step 6 (Agency assignment)
-- **Last Completed Step:** Step 5 (Orders and quotations)
+- **Current Step:** Ready to start Step 7 (Production and quality control)
+- **Last Completed Step:** Step 6 (Agency assignment)
 
 ---
 
@@ -16,8 +16,8 @@
 | 3 | Excel, CSV and photo matching | Completed | Yes | Yes | Yes | Backend and Frontend |
 | 4 | Template designer | Completed | Yes | Yes | Yes (largest) | Backend and Frontend |
 | 5 | Orders and quotations | Completed | Yes | Yes | Yes | Backend and Frontend |
-| 6 | Agency assignment | Ready to start | Yes | Yes | Yes | Backend and Frontend |
-| 7 | Production and quality | Not started | Yes | Yes | Yes | Backend and Frontend |
+| 6 | Agency assignment | Completed | Yes | Yes | Yes | Backend and Frontend |
+| 7 | Production and quality | Ready to start | Yes | Yes | Yes | Backend and Frontend |
 | 8 | Dispatch and delivery | Not started | Yes | Yes | Yes | Backend and Frontend |
 | 9 | Finance | Not started | Yes | Yes | Yes | Backend and Frontend |
 | 10 | Notifications, reports, audit | Not started | Yes | Yes | Yes | Backend and Frontend |
@@ -358,10 +358,76 @@
   - UI Rules (Responsive across 360px, 768px, 1280px, 1920px): verified.
 
 ### What Is Next
-- **Step 6: Agency assignment**
-  - Database: `order_assignments`, agency capacity tracking, internal printing job tracking.
-  - Backend: Automatic/manual order assignment to printing agency, agency cost separation from school price, assignment acceptance/rejection flow.
-  - Frontend: Admin assignment interface with agency capacity and cost metrics, Agency portal assignment acceptance dashboard.
+- Step 6 completed. Moving to Step 7 (Production and quality control).
+
+
+
+---
+
+## Step 6 Log: Agency Management and Job Assignment
+
+### What Was Built
+1. **API Contract Definition:**
+   - Added 8 endpoints to `docs/api-contract.md`:
+     - Admin endpoints: `POST /api/v1/admin/orders/{id}/assignments`, `GET /api/v1/admin/assignments`, `GET /api/v1/admin/assignments/{id}`, `POST /api/v1/admin/assignments/{id}/reassign`.
+     - Agency endpoints: `GET /api/v1/agency/jobs`, `GET /api/v1/agency/jobs/{id}`, `POST /api/v1/agency/jobs/{id}/accept`, `POST /api/v1/agency/jobs/{id}/reject`.
+2. **Database Migrations & JPA Entities:**
+   - Created Flyway migration `V6__init_agency_assignments.sql`:
+     - `agency_assignments`: UUID PK, unique `assignment_number` (`JOB-YYYY-XXXX`), `order_id` FK, `agency_id` FK, `assigned_by` FK, `assigned_at`, `expected_delivery_date`, `agreed_rate NUMERIC(14,2)`, `total_agreed_amount NUMERIC(14,2)`, `assignment_status`, `reassigned_from_id` FK self-reference, `reassignment_reason`, `rejection_reason`, `notes`.
+     - `agency_job_items`: UUID PK, `assignment_id` FK, `order_item_id` FK, `assigned_quantity`, `printed_quantity`, `rejected_quantity`, `accepted_quantity`, `pending_quantity`.
+     - Complete indexes: `idx_agency_assignments_order_id`, `idx_agency_assignments_agency_id`, `idx_agency_assignments_status`, `idx_agency_job_items_assignment_id`, `idx_agency_job_items_order_item_id`.
+   - Entities: `AgencyAssignment.java`, `AgencyJobItem.java`, `AssignmentStatus.java`.
+   - Repositories: `AgencyAssignmentRepository.java`, `AgencyJobItemRepository.java`.
+3. **Backend Service & Controllers:**
+   - `AgencyJobService.java`:
+     - Validates order state (`APPROVED` or `AWAITING_ASSIGNMENT`).
+     - Supports quantity splitting across multiple printing agencies while preventing over-allocation.
+     - Automatically updates parent order status (`ASSIGNED`, `AWAITING_ASSIGNMENT`, `AGENCY_ACCEPTED`).
+     - Enforces reassignments on rejected or pending assignments (`reassignedFrom` lineage tracking).
+     - Strict role separation: Agency DTOs (`AgencyJobSummaryResponse`, `AgencyJobDetailResponse`) include zero school pricing, customer margin, or parent contact data (**Non-negotiable Rule 1**).
+     - Security token enforcement: Agency ID extracted strictly from JWT claims via `SecurityUtils.getRequiredAgencyId()` (**Non-negotiable Rule 2**).
+   - Controllers: `AdminAgencyAssignmentController.java` (`/api/v1/admin`) and `AgencyJobController.java` (`/api/v1/agency/jobs`).
+4. **Frontend Architecture & Pages:**
+   - `frontend/src/features/assignments/assignmentsConstants.js`: Status badges, colors, and helpers.
+   - `frontend/src/features/assignments/AssignAgencyModal.jsx`: Modal for allocating order quantities across agencies, setting agreed rates, expected delivery dates, and notes.
+   - `frontend/src/features/assignments/ReassignJobModal.jsx`: Modal for reassigning rejected or pending jobs with mandatory reason.
+   - `frontend/src/pages/admin/AdminAssignmentsPage.jsx`: Super Admin global assignment directory with status filter, search, metrics, and direct action triggers.
+   - `frontend/src/pages/admin/AdminOrderDetailPage.jsx`: Added "Assign to Agency" workflow button and nested agency assignment tracking table.
+   - `frontend/src/pages/agency/AgencyJobsPage.jsx`: Printing Agency job queue with status filter, metrics, and navigation.
+   - `frontend/src/pages/agency/AgencyJobDetailPage.jsx`: Technical printing specifications (card width, height, bleed margin, material), job item breakdown, and named "Accept Job" / "Reject Job" actions.
+   - Routed in `App.jsx` under `/admin/assignments`, `/agency/jobs`, `/agency/jobs/:id`.
+5. **QA & Security Verification:**
+   - `AgencyAssignmentIntegrationTest` (2 tests):
+     - End-to-end split assignment lifecycle across two agencies, acceptance by both, and parent order status verification.
+     - Over-allocation validation rejection.
+   - `AgencyAssignmentSecurityTest` (7 tests):
+     - Rule 1: School user forbidden from viewing agency assignments (403).
+     - Rule 1: Agency user receives zero school pricing or margin fields in job details.
+     - Rule 2: Agency B cannot view or accept Agency A's assigned job (404/403).
+     - Rule 2: Agency user cannot access Super Admin assignment endpoints (403).
+     - Rule 4: Named business state transitions only (cannot accept non-assigned job).
+     - Rule 8: Validation failure on missing rejection reason.
+     - Unauthenticated access rejection (401).
+
+### How It Was Verified
+- **Backend Test Suite:** Full suite `mvn test` executed across all modules — **116/116 tests passed** (0 failures, 0 errors, 0 skipped).
+- **Frontend Build:** `npm --prefix frontend run build` completed cleanly in 7.14s with 0 errors.
+- **Non-Negotiables Checklist:**
+  - Rule 1 (School sees no agency data; agency sees no school pricing/margins): fully verified.
+  - Rule 2 (Never trust tenant IDs from client payload): fully verified.
+  - Rule 3 (Money precision in `NUMERIC(14,2)` and `BigDecimal`): fully verified.
+  - Rule 4 (Named business actions for status): fully verified.
+  - Rule 5 (No mock/fake data): fully verified.
+  - Rule 6 (Pagination & indexes on all foreign keys & filter columns): fully verified.
+  - Rule 7 (Standard error format): fully verified.
+  - Rule 8 (Jakarta validation): fully verified.
+  - UI Rules (Responsive across 360px, 768px, 1280px, 1920px): fully verified.
+
+### What Is Next
+- **Step 7: Production and quality control**
+  - Database: `production_batches`, `production_updates`, `quality_checks`, `reprint_requests`.
+  - Backend: Batching jobs, batch progress updates, QC approval/rejection per card, automated reprint generation.
+  - Frontend: Agency production batch manager, Agency/Admin QC inspection dashboard.
 
 ---
 

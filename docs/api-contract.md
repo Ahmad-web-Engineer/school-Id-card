@@ -1148,3 +1148,171 @@
   ```
 - **Success Response (201 Created):** `QuotationResponse` with subtotal, tax amount, and total amount calculated. Order status updated to `QUOTATION_GENERATED`.
 
+
+
+---
+
+## Step 6 Endpoints: Agency Management and Job Assignment
+
+### 1. Admin: Assign Order to Agency (with quantity splitting)
+- **Path:** `/api/v1/admin/orders/{id}/assignments`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`
+- **Access Rule:** Order must be in `APPROVED` or `AWAITING_ASSIGNMENT` status. Split quantities must not exceed available order quantities.
+- **Request Body:**
+  ```json
+  {
+    "assignments": [
+      {
+        "agencyId": "a1a2a3a4-0000-0000-0000-000000000001",
+        "expectedDeliveryDate": "2026-11-20",
+        "agreedRate": 25.00,
+        "notes": "Urgent print run",
+        "jobItems": [
+          {
+            "orderItemId": "o1o2o3o4-0000-0000-0000-000000000001",
+            "assignedQuantity": 300
+          }
+        ]
+      }
+    ]
+  }
+  ```
+- **Success Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "as1as2as3-0000-0000-0000-000000000001",
+        "assignmentNumber": "JOB-2026-0001",
+        "orderId": "ord1ord2-0000-0000-0000-000000000001",
+        "orderNumber": "ORD-2026-0001",
+        "agencyId": "a1a2a3a4-0000-0000-0000-000000000001",
+        "agencyName": "Metro Print Works",
+        "assignedBy": "Super Admin",
+        "assignedAt": "2026-11-02T10:30:00Z",
+        "expectedDeliveryDate": "2026-11-20",
+        "agreedRate": 25.00,
+        "assignmentStatus": "ASSIGNED",
+        "reassignedFromId": null,
+        "notes": "Urgent print run",
+        "totalAssignedQuantity": 300,
+        "jobItems": [
+          {
+            "id": "ji1ji2ji3-0000-0000-0000-000000000001",
+            "orderItemId": "o1o2o3o4-0000-0000-0000-000000000001",
+            "productType": "PVC_ID_CARD",
+            "assignedQuantity": 300,
+            "printedQuantity": 0,
+            "rejectedQuantity": 0,
+            "acceptedQuantity": 0,
+            "pendingQuantity": 300
+          }
+        ]
+      }
+    ],
+    "message": "Order jobs successfully assigned to agencies.",
+    "timestamp": "2026-11-02T10:30:00Z"
+  }
+  ```
+- **Error Responses:**
+  - `400 BAD_REQUEST`: `INVALID_ACTION` ("Only APPROVED orders can be assigned"), `VALIDATION_FAILED` ("Assigned quantity exceeds available order quantity").
+  - `404 NOT_FOUND`: `RESOURCE_NOT_FOUND` ("Order or Agency not found").
+
+### 2. Admin: List All Agency Assignments
+- **Path:** `/api/v1/admin/assignments`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`
+- **Query Parameters:** `page`, `size`, `orderId`, `agencyId`, `status`, `search`
+- **Success Response (200 OK):** Paginated `AdminAgencyAssignmentResponse` list.
+
+### 3. Admin: Get Assignment Details by ID
+- **Path:** `/api/v1/admin/assignments/{id}`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`
+- **Success Response (200 OK):** `AdminAgencyAssignmentDetailResponse` including agency details, agreed rate, total agreed amount, line items, and reassignment history.
+
+### 4. Admin: Reassign Job
+- **Path:** `/api/v1/admin/assignments/{id}/reassign`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`
+- **Request Body:**
+  ```json
+  {
+    "newAgencyId": "a2a3a4a5-0000-0000-0000-000000000002",
+    "expectedDeliveryDate": "2026-11-25",
+    "agreedRate": 26.50,
+    "reassignmentReason": "Original agency rejected due to machine maintenance"
+  }
+  ```
+- **Success Response (200 OK):** `AdminAgencyAssignmentResponse` for newly created assignment. Old assignment marked as `REASSIGNED`.
+- **Error Responses:**
+  - `400 BAD_REQUEST`: `INVALID_ACTION` ("Only REJECTED or pending ASSIGNED jobs can be reassigned").
+
+### 5. Agency: List Own Assigned Jobs
+- **Path:** `/api/v1/agency/jobs`
+- **Method:** `GET`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Access Rule:** Resolves `agency_id` strictly from JWT session. Hidden: school pricing, platform profit, client customer identity.
+- **Query Parameters:** `page`, `size`, `status`, `search`
+- **Success Response (200 OK):** Paginated `AgencyJobSummaryResponse`:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "content": [
+        {
+          "id": "as1as2as3-0000-0000-0000-000000000001",
+          "jobNumber": "JOB-2026-0001",
+          "academicSession": "2026-2027",
+          "totalQuantity": 300,
+          "expectedDeliveryDate": "2026-11-20",
+          "assignmentStatus": "ASSIGNED",
+          "assignedAt": "2026-11-02T10:30:00Z"
+        }
+      ],
+      "pageNumber": 0,
+      "pageSize": 10,
+      "totalElements": 1,
+      "totalPages": 1,
+      "first": true,
+      "last": true
+    },
+    "message": "Agency jobs retrieved successfully.",
+    "timestamp": "2026-11-02T10:30:00Z"
+  }
+  ```
+
+### 6. Agency: Get Job Details
+- **Path:** `/api/v1/agency/jobs/{id}`
+- **Method:** `GET`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Access Rule:** Checks `assignment.agency_id == caller.agency_id`. Returns print specs (card dimensions, bleed, front/back JSON or render specs), job items, quantities, and expected delivery date.
+- **Success Response (200 OK):** `AgencyJobDetailResponse`.
+- **Error Responses:**
+  - `404 NOT_FOUND`: `RESOURCE_NOT_FOUND` (if job doesn't exist or belongs to another agency).
+
+### 7. Agency: Accept Assigned Job
+- **Path:** `/api/v1/agency/jobs/{id}/accept`
+- **Method:** `POST`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Access Rule:** Checks `assignment.agency_id == caller.agency_id`. Transitions status to `AGENCY_ACCEPTED`.
+- **Success Response (200 OK):** Updated `AgencyJobDetailResponse`.
+- **Error Responses:**
+  - `400 BAD_REQUEST`: `INVALID_ACTION` ("Only ASSIGNED jobs can be accepted").
+
+### 8. Agency: Reject Assigned Job
+- **Path:** `/api/v1/agency/jobs/{id}/reject`
+- **Method:** `POST`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Access Rule:** Checks `assignment.agency_id == caller.agency_id`. Transitions status to `REJECTED`.
+- **Request Body:**
+  ```json
+  {
+    "rejectionReason": "Insufficient machine capacity during the delivery window"
+  }
+  ```
+- **Success Response (200 OK):** Updated `AgencyJobDetailResponse`.
+- **Error Responses:**
+  - `400 BAD_REQUEST`: `INVALID_ACTION` ("Only ASSIGNED jobs can be rejected").

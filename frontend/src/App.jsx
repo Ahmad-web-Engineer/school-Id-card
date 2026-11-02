@@ -20,6 +20,9 @@ import OrderDetailPage from './pages/school/OrderDetailPage';
 import TemplatesPage from './pages/admin/TemplatesPage';
 import AdminOrdersPage from './pages/admin/AdminOrdersPage';
 import AdminOrderDetailPage from './pages/admin/AdminOrderDetailPage';
+import AdminAssignmentsPage from './pages/admin/AdminAssignmentsPage';
+import AgencyJobsPage from './pages/agency/AgencyJobsPage';
+import AgencyJobDetailPage from './pages/agency/AgencyJobDetailPage';
 import AgencyDashboardPage from './pages/agency/AgencyDashboardPage';
 import AgencyProfilePage from './pages/agency/AgencyProfilePage';
 
@@ -55,6 +58,7 @@ export default function App() {
           <Route path="templates" element={<TemplatesPage />} />
           <Route path="orders" element={<AdminOrdersPage />} />
           <Route path="orders/:id" element={<AdminOrderDetailPage />} />
+          <Route path="assignments" element={<AdminAssignmentsPage />} />
           <Route path="*" element={<AdminDashboardPage />} />
         </Route>
       </Route>
@@ -78,6 +82,10 @@ export default function App() {
         <Route path="/agency" element={<AgencyLayout />}>
           <Route index element={<AgencyDashboardPage />} />
           <Route path="profile" element={<AgencyProfilePage />} />
+          <Route path="jobs" element={<AgencyJobsPage />} />
+          <Route path="jobs/:id" element={<AgencyJobDetailPage />} />
+          <Route path="assigned-jobs" element={<AgencyJobsPage />} />
+          <Route path="assigned-jobs/:id" element={<AgencyJobDetailPage />} />
           <Route path="*" element={<AgencyDashboardPage />} />
         </Route>
       </Route>
