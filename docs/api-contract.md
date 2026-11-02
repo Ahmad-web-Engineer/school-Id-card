@@ -1316,3 +1316,184 @@
 - **Success Response (200 OK):** Updated `AgencyJobDetailResponse`.
 - **Error Responses:**
   - `400 BAD_REQUEST`: `INVALID_ACTION` ("Only ASSIGNED jobs can be rejected").
+
+---
+
+## 7. Step 7: Production and Quality Control APIs
+
+### 1. Agency: Start Production
+- **Path:** `/api/v1/agency/jobs/{id}/start`
+- **Method:** `POST`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Access Rule:** Checks `assignment.agency_id == caller.agency_id`. Assignment must be in `AGENCY_ACCEPTED` status.
+- **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "assignmentId": "as1as2as3-0000-0000-0000-000000000001",
+      "jobNumber": "JOB-2026-0001",
+      "assignmentStatus": "IN_PRODUCTION",
+      "message": "Production started successfully"
+    },
+    "timestamp": "2026-11-02T11:00:00Z"
+  }
+  ```
+- **Error Responses:**
+  - `400 BAD_REQUEST`: `INVALID_ACTION` ("Only AGENCY_ACCEPTED jobs can start production").
+
+### 2. Agency: Create Production Batch
+- **Path:** `/api/v1/agency/jobs/{id}/batches`
+- **Method:** `POST`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Access Rule:** Checks `assignment.agency_id == caller.agency_id`. Assignment must be in `IN_PRODUCTION`.
+- **Request Body:**
+  ```json
+  {
+    "plannedQuantity": 150,
+    "notes": "Class 10th - Sections A and B"
+  }
+  ```
+- **Success Response (201 CREATED):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "pb1pb2pb3-0000-0000-0000-000000000001",
+      "assignmentId": "as1as2as3-0000-0000-0000-000000000001",
+      "batchNumber": "BATCH-2026-0001",
+      "plannedQuantity": 150,
+      "actualQuantity": 0,
+      "productionStatus": "IN_PROGRESS",
+      "startedAt": "2026-11-02T11:05:00Z",
+      "completedAt": null,
+      "notes": "Class 10th - Sections A and B"
+    },
+    "timestamp": "2026-11-02T11:05:00Z"
+  }
+  ```
+
+### 3. Agency: List Batches for Job
+- **Path:** `/api/v1/agency/jobs/{id}/batches`
+- **Method:** `GET`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Access Rule:** Checks `assignment.agency_id == caller.agency_id`. Returns paginated batches.
+- **Success Response (200 OK):** Paged list of `AgencyProductionBatchResponse`.
+
+### 4. Agency: Post Production Update
+- **Path:** `/api/v1/agency/batches/{batchId}/updates`
+- **Method:** `POST`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Access Rule:** Checks batch's assignment belongs to caller's agency.
+- **Request Body:**
+  ```json
+  {
+    "printedQuantity": 150,
+    "rejectedQuantity": 5,
+    "remarks": "5 cards rejected due to ink streak defect",
+    "evidenceFileId": "uploads/defects/streak-evidence.jpg"
+  }
+  ```
+- **Success Response (200 OK):** Updated `AgencyProductionBatchResponse`.
+
+### 5. Agency: Submit Quality Check
+- **Path:** `/api/v1/agency/jobs/{id}/quality-checks`
+- **Method:** `POST`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Access Rule:** Checks `assignment.agency_id == caller.agency_id`.
+- **Request Body:**
+  ```json
+  {
+    "inspectedQuantity": 150,
+    "acceptedQuantity": 145,
+    "rejectedQuantity": 5,
+    "defectCategory": "PRINT_ALIGNMENT",
+    "defectDescription": "5 cards misaligned by >2mm along vertical edge",
+    "notes": "Need replacement print"
+  }
+  ```
+- **Success Response (201 CREATED):** `QualityCheckResponse`. If `rejectedQuantity > 0`, automated reprint request is generated.
+
+### 6. Agency: List Quality Checks for Job
+- **Path:** `/api/v1/agency/jobs/{id}/quality-checks`
+- **Method:** `GET`
+- **Role / Access:** `PRINTING_AGENCY`
+- **Success Response (200 OK):** Paged list of `QualityCheckResponse`.
+
+### 7. Admin: List All Production Batches
+- **Path:** `/api/v1/admin/production/batches`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`
+- **Query Params:** `assignmentId`, `agencyId`, `status`, `page`, `size`
+- **Success Response (200 OK):** Paginated `AdminProductionBatchResponse`.
+
+### 8. Admin: List All Quality Checks
+- **Path:** `/api/v1/admin/production/quality-checks`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`
+- **Query Params:** `assignmentId`, `status`, `page`, `size`
+- **Success Response (200 OK):** Paginated `AdminQualityCheckResponse`.
+
+### 9. Admin: Perform Inspection (Model B Delivery)
+- **Path:** `/api/v1/admin/assignments/{id}/quality-checks`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`
+- **Request Body:** Same as Submit Quality Check.
+- **Success Response (201 CREATED):** `AdminQualityCheckResponse`.
+
+### 10. Admin: List Reprint Requests
+- **Path:** `/api/v1/admin/production/reprints`
+- **Method:** `GET`
+- **Role / Access:** `SUPER_ADMIN`
+- **Query Params:** `assignmentId`, `status`, `page`, `size`
+- **Success Response (200 OK):** Paginated `AdminReprintRequestResponse`.
+
+### 11. Admin: Approve Reprint Request
+- **Path:** `/api/v1/admin/reprints/{id}/approve`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`
+- **Request Body:**
+  ```json
+  {
+    "costBearer": "AGENCY",
+    "notes": "Approved for agency reprint due to printer misalignment defect"
+  }
+  ```
+- **Success Response (200 OK):** `AdminReprintRequestResponse` with status `APPROVED`.
+
+### 12. Admin: Reject Reprint Request
+- **Path:** `/api/v1/admin/reprints/{id}/reject`
+- **Method:** `POST`
+- **Role / Access:** `SUPER_ADMIN`
+- **Request Body:**
+  ```json
+  {
+    "rejectionReason": "Card defect within acceptable 1mm tolerance margin"
+  }
+  ```
+- **Success Response (200 OK):** `AdminReprintRequestResponse` with status `REJECTED`.
+
+### 13. School: Order Production Tracking
+- **Path:** `/api/v1/school/orders/{id}/tracking`
+- **Method:** `GET`
+- **Role / Access:** `SCHOOL`
+- **Access Rule:** Checks `order.school_id == caller.school_id`.
+- **Rule 1 Guarantee:** Returns overall cards printed count, quality inspected count, and percentage completion. Zero agency name, cost, or assignment split is leaked.
+- **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "orderId": "ord1ord2-0000-0000-0000-000000000001",
+      "orderNumber": "ORD-2026-0001",
+      "orderStatus": "IN_PRODUCTION",
+      "totalCards": 300,
+      "cardsPrinted": 150,
+      "cardsVerified": 145,
+      "percentComplete": 50.0,
+      "currentStage": "PRINTING",
+      "stageDescription": "Your ID cards are actively in production at our certified printing facility."
+    },
+    "timestamp": "2026-11-02T11:15:00Z"
+  }
+  ```

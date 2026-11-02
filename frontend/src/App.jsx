@@ -21,10 +21,14 @@ import TemplatesPage from './pages/admin/TemplatesPage';
 import AdminOrdersPage from './pages/admin/AdminOrdersPage';
 import AdminOrderDetailPage from './pages/admin/AdminOrderDetailPage';
 import AdminAssignmentsPage from './pages/admin/AdminAssignmentsPage';
+import AdminProductionPage from './pages/admin/AdminProductionPage';
+import AdminQualityControlPage from './pages/admin/AdminQualityControlPage';
 import AgencyJobsPage from './pages/agency/AgencyJobsPage';
 import AgencyJobDetailPage from './pages/agency/AgencyJobDetailPage';
 import AgencyDashboardPage from './pages/agency/AgencyDashboardPage';
 import AgencyProfilePage from './pages/agency/AgencyProfilePage';
+import AgencyProductionPage from './pages/agency/AgencyProductionPage';
+import AgencyQualityPage from './pages/agency/AgencyQualityPage';
 
 export default function App() {
   return (
@@ -59,6 +63,8 @@ export default function App() {
           <Route path="orders" element={<AdminOrdersPage />} />
           <Route path="orders/:id" element={<AdminOrderDetailPage />} />
           <Route path="assignments" element={<AdminAssignmentsPage />} />
+          <Route path="production" element={<AdminProductionPage />} />
+          <Route path="quality-control" element={<AdminQualityControlPage />} />
           <Route path="*" element={<AdminDashboardPage />} />
         </Route>
       </Route>
@@ -86,6 +92,9 @@ export default function App() {
           <Route path="jobs/:id" element={<AgencyJobDetailPage />} />
           <Route path="assigned-jobs" element={<AgencyJobsPage />} />
           <Route path="assigned-jobs/:id" element={<AgencyJobDetailPage />} />
+          <Route path="production" element={<AgencyProductionPage />} />
+          <Route path="quality-control" element={<AgencyQualityPage />} />
+          <Route path="quality" element={<AgencyQualityPage />} />
           <Route path="*" element={<AgencyDashboardPage />} />
         </Route>
       </Route>

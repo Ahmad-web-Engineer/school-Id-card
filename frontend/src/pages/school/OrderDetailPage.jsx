@@ -24,7 +24,8 @@ import {
   Receipt,
   FileText,
   Search,
-  Check
+  Check,
+  Printer
 } from 'lucide-react';
 
 const ORDER_STEPS = [
@@ -34,6 +35,10 @@ const ORDER_STEPS = [
   { key: 'VERIFIED', label: 'Verified' },
   { key: 'QUOTATION_GENERATED', label: 'Quotation Ready' },
   { key: 'APPROVED', label: 'Approved' },
+  { key: 'IN_PRODUCTION', label: 'In Production' },
+  { key: 'PRINTING_COMPLETED', label: 'Printing Done' },
+  { key: 'DISPATCHED', label: 'Dispatched' },
+  { key: 'DELIVERED', label: 'Delivered' },
 ];
 
 function getStepIndex(status) {
@@ -63,6 +68,14 @@ export default function OrderDetailPage() {
     queryKey: ['school-order-detail', id],
     queryFn: () => api.get(`/school/orders/${id}`),
     enabled: !!id,
+  });
+
+  // Fetch Live Production Tracking (Step 7)
+  const { data: trackingRes } = useQuery({
+    queryKey: ['school-order-tracking', id],
+    queryFn: () => api.get(`/school/orders/${id}/tracking`),
+    enabled: !!id,
+    retry: false,
   });
 
   // Submit Draft Order mutation
@@ -131,6 +144,7 @@ export default function OrderDetailPage() {
   });
 
   const quotation = order.quotation;
+  const tracking = trackingRes?.data;
 
   return (
     <div className="space-y-6">
@@ -265,6 +279,54 @@ export default function OrderDetailPage() {
           })}
         </div>
       </Card>
+
+      {/* Live Production & Quality Verification Tracking (Step 7) */}
+      {tracking && (
+        <Card className="p-5 border-indigo-100 bg-gradient-to-r from-indigo-50/40 via-white to-slate-50/40">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-indigo-100 gap-2">
+            <div className="flex items-center space-x-2">
+              <Printer className="h-5 w-5 text-indigo-600" />
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Live Production & Verification Status</h3>
+                <p className="text-xs text-slate-500">{tracking.stageDescription || 'Manufacturing in progress'}</p>
+              </div>
+            </div>
+            <Badge variant="primary" size="sm">
+              {tracking.currentStage}
+            </Badge>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <div>
+              <div className="flex justify-between text-xs font-semibold text-slate-700 mb-1">
+                <span>Production Completion</span>
+                <span className="font-mono text-indigo-600">{tracking.percentComplete}%</span>
+              </div>
+              <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-indigo-600 transition-all duration-500"
+                  style={{ width: `${Math.min(100, Math.max(0, tracking.percentComplete || 0))}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-center">
+              <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                <p className="text-[11px] text-slate-500 font-medium">Total Ordered</p>
+                <p className="text-base font-bold text-slate-900 mt-0.5">{tracking.totalCards}</p>
+              </div>
+              <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                <p className="text-[11px] text-slate-500 font-medium">Printed Cards</p>
+                <p className="text-base font-bold text-indigo-600 mt-0.5">{tracking.cardsPrinted}</p>
+              </div>
+              <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                <p className="text-[11px] text-slate-500 font-medium">Quality Verified</p>
+                <p className="text-base font-bold text-emerald-600 mt-0.5">{tracking.cardsVerified}</p>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Quotation Review Card (if Quotation is generated or approved) */}
       {quotation && (

@@ -1,8 +1,8 @@
 # Project Progress: School ID Card Platform
 
 ## Current Status
-- **Current Step:** Ready to start Step 7 (Production and quality control)
-- **Last Completed Step:** Step 6 (Agency assignment)
+- **Current Step:** Ready to start Step 8 (Dispatch and delivery)
+- **Last Completed Step:** Step 7 (Production and quality control)
 
 ---
 
@@ -17,8 +17,8 @@
 | 4 | Template designer | Completed | Yes | Yes | Yes (largest) | Backend and Frontend |
 | 5 | Orders and quotations | Completed | Yes | Yes | Yes | Backend and Frontend |
 | 6 | Agency assignment | Completed | Yes | Yes | Yes | Backend and Frontend |
-| 7 | Production and quality | Ready to start | Yes | Yes | Yes | Backend and Frontend |
-| 8 | Dispatch and delivery | Not started | Yes | Yes | Yes | Backend and Frontend |
+| 7 | Production and quality | Completed | Yes | Yes | Yes | Backend and Frontend |
+| 8 | Dispatch and delivery | Ready to start | Yes | Yes | Yes | Backend and Frontend |
 | 9 | Finance | Not started | Yes | Yes | Yes | Backend and Frontend |
 | 10 | Notifications, reports, audit | Not started | Yes | Yes | Yes | Backend and Frontend |
 | 11 | Hardening and full testing | Not started | No | Fixes only | Fixes only | Security and QA lead |
@@ -424,10 +424,77 @@
   - UI Rules (Responsive across 360px, 768px, 1280px, 1920px): fully verified.
 
 ### What Is Next
-- **Step 7: Production and quality control**
-  - Database: `production_batches`, `production_updates`, `quality_checks`, `reprint_requests`.
-  - Backend: Batching jobs, batch progress updates, QC approval/rejection per card, automated reprint generation.
-  - Frontend: Agency production batch manager, Agency/Admin QC inspection dashboard.
+- Proceed to Step 7 (Production and quality control)
+
+---
+
+## Step 7 Log: Production and Quality Control
+
+### What Was Built
+1. **API Contract Definition:**
+   - Appended 13 Step 7 endpoints in [docs/api-contract.md](file:///c:/Users/a4477/Downloads/School%20id%20card/docs/api-contract.md):
+     - Agency production & QC: `POST /api/v1/agency/jobs/{id}/start`, `POST /api/v1/agency/jobs/{id}/batches`, `GET /api/v1/agency/jobs/{id}/batches`, `POST /api/v1/agency/batches/{id}/updates`, `POST /api/v1/agency/jobs/{id}/quality-checks`, `GET /api/v1/agency/jobs/{id}/quality-checks`.
+     - Admin operations: `GET /api/v1/admin/production/batches`, `GET /api/v1/admin/production/quality-checks`, `POST /api/v1/admin/assignments/{id}/quality-checks`, `GET /api/v1/admin/production/reprints`, `POST /api/v1/admin/reprints/{id}/approve`, `POST /api/v1/admin/reprints/{id}/reject`.
+     - School live tracking: `GET /api/v1/school/orders/{id}/tracking`.
+2. **Database Migration:**
+   - Created Flyway migration `V7__init_production_and_qc.sql`:
+     - `production_batches`: UUID PK, `assignment_id` FK, `batch_number` unique (`BATCH-YYYY-XXXX`), `planned_quantity`, `actual_quantity`, `production_status` (`PLANNED`, `IN_PROGRESS`, `PAUSED`, `PRINTING_COMPLETED`, `CANCELLED`), `started_at`, `completed_at`, `notes`.
+     - `production_updates`: UUID PK, `batch_id` FK, `updated_by` FK, `printed_quantity`, `rejected_quantity`, `pending_quantity`, `remarks`, `evidence_file_id`.
+     - `quality_checks`: UUID PK, `assignment_id` FK, `check_number` unique (`QC-YYYY-XXXX`), `inspected_quantity`, `accepted_quantity`, `rejected_quantity`, `defect_category` (`COLOR_MISMATCH`, `ALIGNMENT_OFF`, `BLURRY_PHOTO`, `TYPO_ON_CARD`, `LAMINATION_DEFECT`, `DAMAGED_CARD`, `BARCODE_UNREADABLE`, `OTHER`), `defect_description`, `inspected_by` FK, `inspection_status` (`PASSED`, `FAILED`, `CONDITIONALLY_PASSED`), `inspected_at`.
+     - `reprint_requests`: UUID PK, `assignment_id` FK, `quality_check_id` FK, `request_number` unique (`REP-YYYY-XXXX`), `replacement_quantity`, `reason`, `cost_bearer` (`AGENCY`, `PLATFORM`, `SCHOOL`), `approval_status` (`PENDING`, `APPROVED`, `REJECTED`), `approved_by` FK, `approved_at`, `rejection_reason`.
+     - Performance indexes on all foreign keys and filter columns.
+3. **Backend Service & Controllers:**
+   - Entities & Enums: `ProductionBatch`, `ProductionUpdate`, `QualityCheck`, `ReprintRequest`, `ProductionBatchStatus`, `QualityCheckStatus`, `DefectCategory`, `ReprintStatus`, `CostBearer`.
+   - Repositories: `ProductionBatchRepository`, `ProductionUpdateRepository`, `QualityCheckRepository`, `ReprintRequestRepository`.
+   - `ProductionService`:
+     - Transitions job to `IN_PRODUCTION` when starting production; triggers parent order transition.
+     - Auto-generates sequences for batch numbers (`BATCH-2026-XXXX`), quality checks (`QC-2026-XXXX`), and reprints (`REP-2026-XXXX`).
+     - Logs incremental production updates and calculates actual quantity printed.
+     - Validates inspection counts: `inspected_quantity = accepted_quantity + rejected_quantity`.
+     - Automatically generates `reprint_requests` in `PENDING` status whenever defects are rejected in QC.
+     - Supports Super Admin reprint approval with explicit financial cost bearer liability (`AGENCY`, `PLATFORM`, `SCHOOL`) (**Non-negotiable Rule 3**).
+     - Provides School order tracking strictly scrubbing all agency names, internal batch IDs, and cost data (**Non-negotiable Rule 1**).
+   - Controllers:
+     - `AgencyProductionController.java` (`/api/v1/agency`)
+     - `AdminProductionController.java` (`/api/v1/admin`)
+     - `SchoolOrderTrackingController.java` (`/api/v1/school/orders/{id}/tracking`)
+4. **Frontend Architecture & Pages:**
+   - Constants: `frontend/src/features/production/productionConstants.js`.
+   - Modals: `CreateBatchModal.jsx`, `ProductionUpdateModal.jsx`, `SubmitQualityCheckModal.jsx`, `ReviewReprintModal.jsx`.
+   - Agency Pages: `frontend/src/pages/agency/AgencyProductionPage.jsx`, `frontend/src/pages/agency/AgencyQualityPage.jsx`.
+   - Admin Pages: `frontend/src/pages/admin/AdminProductionPage.jsx`, `frontend/src/pages/admin/AdminQualityControlPage.jsx`.
+   - School Live Tracking: Updated `frontend/src/pages/school/OrderDetailPage.jsx` with real-time manufacturing and inspection status tracking.
+   - Routing: Added `/admin/production`, `/admin/quality-control`, `/agency/production`, `/agency/quality-control`, and `/agency/quality` in `App.jsx`.
+5. **QA & Security Verification:**
+   - `ProductionSecurityTest` (6 tests):
+     - Rule 1: School user forbidden from viewing agency batch production endpoints (403).
+     - Rule 1: School order tracking sanitization verification (no agency IDs, no internal job numbers, no agency names).
+     - Rule 2: Agency B cannot create batches for Agency A's assignment (404/403).
+     - Rule 2: Agency user forbidden on Super Admin production & reprint endpoints (403).
+     - Rule 8: Jakarta validation on QC quantities (`inspected != accepted + rejected` returns 400).
+     - Unauthenticated access returns 401.
+   - `ProductionIntegrationTest` (1 end-to-end test):
+     - Full production flow: Start production -> create batch -> log updates -> run QC with defects -> automated reprint generation -> admin review & approve reprint with cost bearer -> school tracking verification.
+
+### How It Was Verified
+- **Backend Test Suite:** Executed `mvn test` across all platform modules — **123/123 tests passed** (0 failures, 0 errors, 0 skipped).
+- **Frontend Build:** `npm --prefix frontend run build` completed cleanly in 8.62s with 0 errors.
+- **Non-Negotiables Checklist:**
+  - Rule 1 (School sees 0 agency data; separate DTOs): fully verified.
+  - Rule 2 (Never trust tenant IDs from client payload): fully verified via `SecurityUtils`.
+  - Rule 3 (Money precision in `NUMERIC(14,2)` and `BigDecimal`; reprint cost bearer tracked): fully verified.
+  - Rule 4 (Named business actions for status): fully verified (`startProduction`, `addProductionUpdate`, `submitQualityCheck`, `approveReprintRequest`, `rejectReprintRequest`).
+  - Rule 5 (No mock/fake data): fully verified.
+  - Rule 6 (Pagination & indexes on all foreign keys & filter columns): fully verified.
+  - Rule 7 (Standard error format): fully verified.
+  - Rule 8 (Jakarta Bean Validation): fully verified.
+  - UI Rules (Responsive across 360px, 768px, 1280px, 1920px): fully verified.
+
+### What Is Next
+- **Step 8: Dispatch and delivery**
+  - Database: `shipments`, `shipment_items`, `delivery_tracking_events`.
+  - Support delivery Model A (Direct from Agency to School) vs Model B (Agency to Admin to School).
+  - Courier integration tracking, shipping label generation, packaging slips, proof of delivery upload, school receipt confirmation.
 
 ---
 
