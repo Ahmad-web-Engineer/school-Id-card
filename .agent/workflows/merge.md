@@ -1,0 +1,1 @@
+Check every parallel worktree for this step. List the changed files per subagent, find any conflict, resolve it without losing either side's work, run the build and all tests on the merged result, and only then give me a commit message for this step.

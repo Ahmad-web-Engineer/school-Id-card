@@ -1,0 +1,34 @@
+# Logs & OS files
+*.log
+Thumbs.db
+.DS_Store
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Java / Spring Boot / Maven / Gradle
+target/
+build/
+.gradle/
+bin/
+out/
+*.class
+
+# Node / React
+node_modules/
+dist/
+dist-ssr/
+*.local
+.env*.local
+
+# Temporary / Artifacts
+.gemini/
+uploads/
+backend/uploads/

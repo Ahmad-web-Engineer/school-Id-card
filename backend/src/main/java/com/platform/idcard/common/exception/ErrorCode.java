@@ -1,0 +1,14 @@
+package com.platform.idcard.common.exception;
+
+public enum ErrorCode {
+    VALIDATION_FAILED,
+    INVALID_REQUEST_PAYLOAD,
+    UNAUTHORIZED,
+    TOKEN_EXPIRED,
+    ACCESS_DENIED,
+    RECORD_ACCESS_FORBIDDEN,
+    RESOURCE_NOT_FOUND,
+    RESOURCE_CONFLICT,
+    INVALID_ACTION,
+    INTERNAL_SERVER_ERROR
+}
