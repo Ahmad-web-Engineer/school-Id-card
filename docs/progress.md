@@ -1060,6 +1060,7 @@
    - **Template Name & Orientation Display (Step 1):** Corrected template title accessor to `{tpl.templateName || tpl.name}` and orientation calculation to dynamic aspect-ratio fallback (`tpl.orientation || (tpl.cardWidthMm > tpl.cardHeightMm ? 'Landscape' : 'Portrait')`), resolving blank template title cards.
    - **Student Roster Array Extraction (Step 2):** Safely extracted student data array (`Array.isArray(studentsRes?.data) ? studentsRes.data : studentsRes?.data?.content || []`) to match `PagedResponse` structure where `data` is the array directly.
    - **Student Field Mappings:** Corrected row and filter accessors to use `s.studentName || s.fullName`, `s.className || s.standard`, and `s.photoFileId || s.hasPhoto`, displaying all 53 enrolled students with proper class/section, roll number, and "Photo Ready" status tags.
+   - **Accessories & Item Deserialization (`AdditionalItemRequest` & `CreateOrderRequest`):** Fixed `Product type is required` validation error on order creation when accessories are selected. Made `AdditionalItemRequest` and `CreateOrderRequest` robust JavaBeans with backward-compatible method accessors, accepting both `productType` and `itemType`, `contactMobile` and `contactPhone`, and `remarks` and `notes`.
    - **Summary (Step 4):** Updated Order Summary template label to `{selectedTemplate?.templateName || selectedTemplate?.name}`.
 
 3. **Order Route Handling (`OrdersPage.jsx`):**

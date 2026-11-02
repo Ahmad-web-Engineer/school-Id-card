@@ -173,6 +173,7 @@ export default function NewOrderWizardModal({ isOpen, onClose, onSuccess }) {
       const activeAccessories = accessories
         .filter((a) => a.enabled && a.quantity > 0)
         .map((a) => ({
+          productType: a.type,
           itemType: a.type,
           itemDescription: a.itemDescription,
           quantity: a.quantity,
@@ -185,8 +186,12 @@ export default function NewOrderWizardModal({ isOpen, onClose, onSuccess }) {
         additionalItems: activeAccessories,
         deliveryAddress: deliveryAddress.trim() || 'School Campus Delivery',
         contactPerson: contactPerson.trim() || 'School Administrator',
+        contactMobile: contactPhone.trim() || '0000000000',
         contactPhone: contactPhone.trim() || '0000000000',
+        remarks: notes.trim() || undefined,
         notes: notes.trim() || undefined,
+        academicSession: '2026-2027',
+        deliveryModel: 'DIRECT_TO_SCHOOL',
       };
 
       const res = await api.post('/school/orders', payload);
