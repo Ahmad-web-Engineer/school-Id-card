@@ -57,6 +57,7 @@ export default function LoginPage() {
   };
 
   const fillQuickCredentials = (role) => {
+    setErrorMessage('');
     if (role === 'ADMIN') {
       setEmail('admin@platform.com');
       setPassword('Password123!');
@@ -117,16 +118,6 @@ export default function LoginPage() {
         >
           <span>Super Admin: <code className="font-mono text-slate-700">admin@platform.com</code></span>
           <span className="text-[10px] bg-indigo-200/60 px-1.5 py-0.5 rounded text-indigo-800">Auto-fill</span>
-        </button>
-      </div>
-
-      <div className="text-center pt-1">
-        <button
-          type="button"
-          onClick={() => navigate('/design-system')}
-          className="text-xs text-slate-500 hover:text-slate-800 underline font-medium"
-        >
-          View Design System Showcase & Component Library &rarr;
         </button>
       </div>
     </form>
