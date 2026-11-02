@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
@@ -8,11 +8,23 @@ import { Shield, School, Printer, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const setAuth = useAuthStore((state) => state.setAuth);
+  const { isAuthenticated, user, setAuth } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      if (user.role === 'SUPER_ADMIN') {
+        navigate('/admin', { replace: true });
+      } else if (user.role === 'SCHOOL') {
+        navigate('/school', { replace: true });
+      } else if (user.role === 'PRINTING_AGENCY') {
+        navigate('/agency', { replace: true });
+      }
+    }
+  }, [isAuthenticated, user, navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();

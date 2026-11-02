@@ -116,9 +116,9 @@ INSERT INTO roles (id, role_name, description) VALUES
     ('33333333-3333-3333-3333-333333333333', 'PRINTING_AGENCY', 'Printing Agency fulfillment partner for card production');
 
 -- Seed Default Super Admin User (password: Password123!)
--- Hash generated with BCrypt 10 rounds: $2a$10$wT55a30Bw8Y0pY3Nsqv6u.3i2c7pZ5XoG7408ZkWXv/X7Y0N2mFf6
+-- Hash generated with BCrypt 10 rounds: $2a$10$YHfA04pKpFm120UuLEVfieU3FBVIXMDzvJ9Bf5lia/jxfStyhAveu
 INSERT INTO users (id, full_name, email, mobile, password_hash, status) VALUES
-    ('00000000-0000-0000-0000-000000000001', 'Super Admin', 'admin@platform.com', '9876543210', '$2a$10$wT55a30Bw8Y0pY3Nsqv6u.3i2c7pZ5XoG7408ZkWXv/X7Y0N2mFf6', 'ACTIVE');
+    ('00000000-0000-0000-0000-000000000001', 'Super Admin', 'admin@platform.com', '9876543210', '$2a$10$YHfA04pKpFm120UuLEVfieU3FBVIXMDzvJ9Bf5lia/jxfStyhAveu', 'ACTIVE');
 
 -- Assign SUPER_ADMIN role to default admin user
 INSERT INTO user_roles (user_id, role_id) VALUES

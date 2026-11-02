@@ -38,12 +38,31 @@ import AdminAuditLogsPage from './pages/admin/AdminAuditLogsPage';
 import AdminReportsPage from './pages/admin/AdminReportsPage';
 import SchoolReportsPage from './pages/school/SchoolReportsPage';
 import AgencyPerformancePage from './pages/agency/AgencyPerformancePage';
+import { useAuthStore } from './store/useAuthStore';
+
+function RootRedirect() {
+  const { isAuthenticated, user } = useAuthStore();
+
+  if (!isAuthenticated || !user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.role === 'SUPER_ADMIN') {
+    return <Navigate to="/admin" replace />;
+  } else if (user.role === 'SCHOOL') {
+    return <Navigate to="/school" replace />;
+  } else if (user.role === 'PRINTING_AGENCY') {
+    return <Navigate to="/agency" replace />;
+  }
+
+  return <Navigate to="/login" replace />;
+}
 
 export default function App() {
   return (
     <Routes>
-      {/* Root redirect to design system showcase */}
-      <Route path="/" element={<Navigate to="/design-system" replace />} />
+      {/* Root redirect to portal or login */}
+      <Route path="/" element={<RootRedirect />} />
 
       {/* Component Library & Design Tokens Verification */}
       <Route
@@ -122,7 +141,7 @@ export default function App() {
       </Route>
 
       {/* 404 Catch-all */}
-      <Route path="*" element={<Navigate to="/design-system" replace />} />
+      <Route path="*" element={<RootRedirect />} />
     </Routes>
   );
 }
