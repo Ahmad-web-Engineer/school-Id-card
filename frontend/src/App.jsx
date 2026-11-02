@@ -6,13 +6,13 @@ import SchoolLayout from './components/layouts/SchoolLayout';
 import AgencyLayout from './components/layouts/AgencyLayout';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
-import DesignSystemShowcasePage from './pages/DesignSystemShowcasePage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import SchoolsPage from './pages/admin/SchoolsPage';
 import AgenciesPage from './pages/admin/AgenciesPage';
 import AdminSchoolStudentsPage from './pages/admin/AdminSchoolStudentsPage';
 import SchoolDashboardPage from './pages/school/SchoolDashboardPage';
 import SchoolProfilePage from './pages/school/SchoolProfilePage';
+import TeachersStaffPage from './pages/school/TeachersStaffPage';
 import StudentsPage from './pages/school/StudentsPage';
 import SchoolTemplatesPage from './pages/school/SchoolTemplatesPage';
 import OrdersPage from './pages/school/OrdersPage';
@@ -36,6 +36,7 @@ import SchoolFinancePage from './pages/school/SchoolFinancePage';
 import AgencySettlementsPage from './pages/agency/AgencySettlementsPage';
 import AdminAuditLogsPage from './pages/admin/AdminAuditLogsPage';
 import AdminReportsPage from './pages/admin/AdminReportsPage';
+import AdminSettingsPage from './pages/admin/AdminSettingsPage';
 import SchoolReportsPage from './pages/school/SchoolReportsPage';
 import AgencyPerformancePage from './pages/agency/AgencyPerformancePage';
 import { useAuthStore } from './store/useAuthStore';
@@ -64,16 +65,6 @@ export default function App() {
       {/* Root redirect to portal or login */}
       <Route path="/" element={<RootRedirect />} />
 
-      {/* Component Library & Design Tokens Verification */}
-      <Route
-        path="/design-system"
-        element={
-          <div className="min-h-full bg-slate-50 p-4 sm:p-8 max-w-7xl mx-auto">
-            <DesignSystemShowcasePage />
-          </div>
-        }
-      />
-
       {/* Auth Shell */}
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<LoginPage />} />
@@ -97,6 +88,7 @@ export default function App() {
           <Route path="finance" element={<AdminFinancePage />} />
           <Route path="reports" element={<AdminReportsPage />} />
           <Route path="audit-logs" element={<AdminAuditLogsPage />} />
+          <Route path="settings" element={<AdminSettingsPage />} />
           <Route path="*" element={<AdminDashboardPage />} />
         </Route>
       </Route>
@@ -106,7 +98,9 @@ export default function App() {
         <Route path="/school" element={<SchoolLayout />}>
           <Route index element={<SchoolDashboardPage />} />
           <Route path="profile" element={<SchoolProfilePage />} />
+          <Route path="settings" element={<SchoolProfilePage />} />
           <Route path="students" element={<StudentsPage />} />
+          <Route path="teachers" element={<TeachersStaffPage />} />
           <Route path="templates" element={<SchoolTemplatesPage />} />
           <Route path="orders" element={<OrdersPage />} />
           <Route path="orders/:id" element={<OrderDetailPage />} />

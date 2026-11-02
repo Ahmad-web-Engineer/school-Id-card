@@ -34,5 +34,15 @@ public record CreateCardTemplateRequest(
 
         String frontDesignJson,
 
-        String backDesignJson
-) {}
+        String backDesignJson,
+
+        Boolean autoApprove
+) {
+    public CreateCardTemplateRequest(
+            String templateName, String templateCategory, UUID schoolId,
+            BigDecimal cardWidthMm, BigDecimal cardHeightMm, BigDecimal bleedMarginMm,
+            String frontDesignJson, String backDesignJson
+    ) {
+        this(templateName, templateCategory, schoolId, cardWidthMm, cardHeightMm, bleedMarginMm, frontDesignJson, backDesignJson, false);
+    }
+}

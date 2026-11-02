@@ -7,7 +7,17 @@ import Input from '../../components/common/Input';
 import Badge from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
 import ResponsiveTable from '../../components/common/ResponsiveTable';
-import { Plus, Search, UserPlus, Building2, Check, AlertCircle } from 'lucide-react';
+import { 
+  Plus, 
+  Search, 
+  UserPlus, 
+  Building2, 
+  Check, 
+  AlertCircle, 
+  KeyRound, 
+  Lock, 
+  CheckCircle2 
+} from 'lucide-react';
 
 export default function AgenciesPage() {
   const queryClient = useQueryClient();
@@ -15,6 +25,7 @@ export default function AgenciesPage() {
   const [search, setSearch] = useState('');
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [isManageUsersOpen, setIsManageUsersOpen] = useState(false);
   const [selectedAgency, setSelectedAgency] = useState(null);
 
   // Form states
@@ -37,6 +48,13 @@ export default function AgenciesPage() {
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Password reset state
+  const [activeResetUserId, setActiveResetUserId] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+
   // Fetch paginated agencies
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['admin-agencies', page, search],
@@ -45,6 +63,19 @@ export default function AgenciesPage() {
         params: { page, size: 10, search: search.trim() || undefined },
       }),
   });
+
+  // Fetch agency users when Manage Users modal is open
+  const { 
+    data: agencyUsersData, 
+    isLoading: isUsersLoading, 
+    refetch: refetchUsers 
+  } = useQuery({
+    queryKey: ['admin-agency-users', selectedAgency?.id],
+    queryFn: () => api.get(`/admin/agencies/${selectedAgency.id}/users`),
+    enabled: isManageUsersOpen && !!selectedAgency,
+  });
+
+  const agencyUsers = agencyUsersData?.data || [];
 
   // Mutation: Register Agency
   const registerMutation = useMutation({
@@ -75,6 +106,7 @@ export default function AgenciesPage() {
       api.post(`/admin/agencies/${agencyId}/users`, userData),
     onSuccess: () => {
       setIsAddUserOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['admin-agency-users', selectedAgency?.id] });
       setSuccessMsg(`User created successfully for ${selectedAgency?.agencyName}!`);
       setTimeout(() => setSuccessMsg(''), 4000);
       setUserForm({
@@ -93,10 +125,7 @@ export default function AgenciesPage() {
   const handleRegisterSubmit = (e) => {
     e.preventDefault();
     setFormError('');
-    registerMutation.mutate({
-      ...agencyForm,
-      productionCapacity: Number(agencyForm.productionCapacity) || 1000,
-    });
+    registerMutation.mutate(agencyForm);
   };
 
   const handleAddUserSubmit = (e) => {
@@ -104,6 +133,30 @@ export default function AgenciesPage() {
     setFormError('');
     if (!selectedAgency) return;
     addUserMutation.mutate({ agencyId: selectedAgency.id, userData: userForm });
+  };
+
+  const handleResetPassword = async (userId) => {
+    if (!newPassword || newPassword.length < 8) {
+      setResetError('Password must be at least 8 characters long.');
+      return;
+    }
+    setResetLoading(true);
+    setResetError('');
+    setResetSuccess('');
+
+    try {
+      await api.post(`/admin/users/${userId}/reset-password`, {
+        newPassword,
+      });
+      setResetSuccess('Password reset successfully!');
+      setActiveResetUserId(null);
+      setNewPassword('');
+      setTimeout(() => setResetSuccess(''), 4000);
+    } catch (err) {
+      setResetError(err.message || 'Failed to reset password.');
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   const columns = [
@@ -129,18 +182,36 @@ export default function AgenciesPage() {
       key: 'actions',
       label: 'Actions',
       render: (_, row) => (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            setSelectedAgency(row);
-            setFormError('');
-            setIsAddUserOpen(true);
-          }}
-        >
-          <UserPlus className="h-3.5 w-3.5 mr-1" />
-          Add User
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setSelectedAgency(row);
+              setResetError('');
+              setResetSuccess('');
+              setActiveResetUserId(null);
+              setIsManageUsersOpen(true);
+            }}
+            title="Manage Agency User Logins and Passwords"
+          >
+            <KeyRound className="h-3.5 w-3.5 mr-1" />
+            Logins
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setSelectedAgency(row);
+              setFormError('');
+              setIsAddUserOpen(true);
+            }}
+            title="Provision Additional Agency User"
+          >
+            <UserPlus className="h-3.5 w-3.5 mr-1" />
+            Add User
+          </Button>
+        </div>
       ),
     },
   ];
@@ -152,7 +223,7 @@ export default function AgenciesPage() {
         <div>
           <h1 className="text-xl font-bold text-slate-900">Printing Agencies</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Fulfillment partners and print workshops. Non-negotiable: Agencies are never visible to schools.
+            Verified production partners, manufacturing capacity tracking, and agency administrative credentials.
           </p>
         </div>
         <Button
@@ -162,89 +233,75 @@ export default function AgenciesPage() {
           }}
         >
           <Plus className="h-4 w-4 mr-1.5" />
-          Register Agency
+          Onboard Agency
         </Button>
       </div>
 
+      {/* Alerts */}
       {successMsg && (
-        <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
-          <Check className="h-4 w-4 text-emerald-600" />
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg flex items-center gap-2">
+          <Check className="h-4 w-4 shrink-0 text-emerald-600" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {/* Filter / Search Bar */}
-      <Card bodyClassName="p-4">
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-          <div className="relative flex-1 w-full">
+      <Card>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Search agencies by name or contact person..."
+              placeholder="Search by agency name, contact person, or email..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPage(0);
               }}
-              className="w-full pl-9 pr-4 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
-          <Button variant="secondary" size="sm" onClick={() => refetch()}>
-            Refresh
-          </Button>
         </div>
       </Card>
 
-      {/* Responsive Agencies Table (Cards on Mobile) */}
-      <ResponsiveTable
-        columns={columns}
-        data={data?.data || []}
-        loading={isLoading}
-        error={error}
-        onRetry={refetch}
-        emptyTitle="No agencies found"
-        emptyMessage={search ? 'No agencies match your search query.' : 'Click "Register Agency" to onboard your first printing agency.'}
-      />
-
-      {/* Pagination Controls */}
-      {data?.pagination && data.pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between text-xs text-slate-600 px-2">
-          <span>
-            Showing page {data.pagination.page + 1} of {data.pagination.totalPages} ({data.pagination.totalElements} agencies)
-          </span>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={data.pagination.page === 0}
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-            >
-              Previous
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={data.pagination.last}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Agencies Table */}
+      <Card>
+        <ResponsiveTable
+          columns={columns}
+          data={data?.data || []}
+          isLoading={isLoading}
+          keyField="id"
+          emptyMessage="No printing agencies found matching your search criteria."
+          pagination={{
+            page: data?.pagination?.page || 0,
+            totalPages: data?.pagination?.totalPages || 0,
+            totalElements: data?.pagination?.totalElements || 0,
+            onPageChange: (newPage) => setPage(newPage),
+          }}
+        />
+      </Card>
 
       {/* Modal: Register Agency */}
       <Modal
         isOpen={isRegisterOpen}
         onClose={() => setIsRegisterOpen(false)}
-        title="Register Printing Agency"
+        title="Onboard New Printing Agency"
+        maxWidth="max-w-xl"
         footer={
           <>
-            <Button variant="outline" size="sm" onClick={() => setIsRegisterOpen(false)}>
+            <Button
+              variant="secondary"
+              onClick={() => setIsRegisterOpen(false)}
+              disabled={registerMutation.isPending}
+            >
               Cancel
             </Button>
-            <Button size="sm" loading={registerMutation.isPending} onClick={handleRegisterSubmit}>
-              Register Agency
+            <Button
+              variant="primary"
+              onClick={handleRegisterSubmit}
+              loading={registerMutation.isPending}
+            >
+              Onboard Agency
             </Button>
           </>
         }
@@ -260,22 +317,24 @@ export default function AgenciesPage() {
             <Input
               label="Agency Name"
               required
-              placeholder="e.g. Apex Card Printers"
+              placeholder="e.g. Apex Card Printers Ltd"
               value={agencyForm.agencyName}
               onChange={(e) => setAgencyForm({ ...agencyForm, agencyName: e.target.value })}
             />
             <Input
               label="Contact Person"
               required
-              placeholder="e.g. Robert Smith"
+              placeholder="e.g. Suresh Patel"
               value={agencyForm.contactPerson}
               onChange={(e) => setAgencyForm({ ...agencyForm, contactPerson: e.target.value })}
             />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Email Address"
               type="email"
               required
-              placeholder="contact@apexprinters.com"
+              placeholder="agency@apexprints.com"
               value={agencyForm.email}
               onChange={(e) => setAgencyForm({ ...agencyForm, email: e.target.value })}
             />
@@ -286,27 +345,28 @@ export default function AgenciesPage() {
               value={agencyForm.mobile}
               onChange={(e) => setAgencyForm({ ...agencyForm, mobile: e.target.value })}
             />
+          </div>
+          <Input
+            label="Facility Address"
+            required
+            placeholder="Plot 45, Peenya Industrial Area, Phase II"
+            value={agencyForm.address}
+            onChange={(e) => setAgencyForm({ ...agencyForm, address: e.target.value })}
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
-              label="Daily Capacity (Cards/Day)"
+              label="Daily Capacity (Cards / Day)"
               type="number"
-              placeholder="5000"
+              required
               value={agencyForm.productionCapacity}
-              onChange={(e) => setAgencyForm({ ...agencyForm, productionCapacity: e.target.value })}
+              onChange={(e) => setAgencyForm({ ...agencyForm, productionCapacity: parseInt(e.target.value, 10) || 0 })}
             />
             <Input
-              label="Special Capabilities"
-              placeholder="e.g. UV Gloss, Smartcard RFID"
+              label="Capabilities"
+              placeholder="Thermal PVC, UV Gloss, RFID"
               value={agencyForm.capabilities}
               onChange={(e) => setAgencyForm({ ...agencyForm, capabilities: e.target.value })}
             />
-            <div className="sm:col-span-2">
-              <Input
-                label="Workshop / Facility Address"
-                placeholder="45 Industrial Zone"
-                value={agencyForm.address}
-                onChange={(e) => setAgencyForm({ ...agencyForm, address: e.target.value })}
-              />
-            </div>
           </div>
         </form>
       </Modal>
@@ -315,14 +375,23 @@ export default function AgenciesPage() {
       <Modal
         isOpen={isAddUserOpen}
         onClose={() => setIsAddUserOpen(false)}
-        title={`Provision Login for ${selectedAgency?.agencyName || 'Agency'}`}
+        title={`Add Staff Account for ${selectedAgency?.agencyName || 'Agency'}`}
+        maxWidth="max-w-lg"
         footer={
           <>
-            <Button variant="outline" size="sm" onClick={() => setIsAddUserOpen(false)}>
+            <Button
+              variant="secondary"
+              onClick={() => setIsAddUserOpen(false)}
+              disabled={addUserMutation.isPending}
+            >
               Cancel
             </Button>
-            <Button size="sm" loading={addUserMutation.isPending} onClick={handleAddUserSubmit}>
-              Create Account
+            <Button
+              variant="primary"
+              onClick={handleAddUserSubmit}
+              loading={addUserMutation.isPending}
+            >
+              Create Staff Login
             </Button>
           </>
         }
@@ -372,6 +441,114 @@ export default function AgenciesPage() {
             />
           </div>
         </form>
+      </Modal>
+
+      {/* Modal: Manage Agency Users & Passwords */}
+      <Modal
+        isOpen={isManageUsersOpen}
+        onClose={() => setIsManageUsersOpen(false)}
+        title={`Staff Logins & Credentials: ${selectedAgency?.agencyName || ''}`}
+        maxWidth="max-w-2xl"
+        footer={
+          <Button variant="secondary" onClick={() => setIsManageUsersOpen(false)}>
+            Close
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-500">
+              Active operational accounts assigned to this printing agency partner.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setIsManageUsersOpen(false);
+                setIsAddUserOpen(true);
+              }}
+            >
+              <UserPlus className="h-3.5 w-3.5 mr-1" />
+              Add User
+            </Button>
+          </div>
+
+          {resetSuccess && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+              <span>{resetSuccess}</span>
+            </div>
+          )}
+
+          {resetError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-lg flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+              <span>{resetError}</span>
+            </div>
+          )}
+
+          {isUsersLoading ? (
+            <div className="p-6 text-center text-xs text-slate-500">Loading user accounts...</div>
+          ) : agencyUsers.length === 0 ? (
+            <div className="p-6 text-center bg-slate-50 border border-dashed border-slate-200 rounded-lg">
+              <Building2 className="h-6 w-6 text-slate-400 mx-auto mb-1" />
+              <p className="text-xs text-slate-600">No login accounts provisioned yet for this agency.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg overflow-hidden bg-white">
+              {agencyUsers.map((u) => (
+                <div key={u.id} className="p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-xs text-slate-900">{u.fullName}</span>
+                        <Badge variant="warning" size="sm">{u.designation || 'Staff'}</Badge>
+                        <Badge variant={u.status === 'ACTIVE' ? 'success' : 'neutral'} size="sm">
+                          {u.status}
+                        </Badge>
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-mono mt-0.5">{u.email}</div>
+                    </div>
+                    <div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setActiveResetUserId(activeResetUserId === u.id ? null : u.id);
+                          setNewPassword('');
+                          setResetError('');
+                        }}
+                      >
+                        <Lock className="h-3 w-3 mr-1" />
+                        {activeResetUserId === u.id ? 'Cancel' : 'Reset Password'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {activeResetUserId === u.id && (
+                    <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                      <input
+                        type="password"
+                        placeholder="Enter new password (min 8 chars)"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="flex-1 px-3 py-1.5 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-amber-500"
+                      />
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => handleResetPassword(u.id)}
+                        loading={resetLoading}
+                      >
+                        Save Password
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );

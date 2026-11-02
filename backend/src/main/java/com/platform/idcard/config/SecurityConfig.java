@@ -52,7 +52,7 @@ public class SecurityConfig {
                         // Public system, error, and health check
                         .requestMatchers("/", "/api/v1/health", "/error").permitAll()
                         // Public auth endpoints
-                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/register-school").permitAll()
                         // Swagger & OpenAPI documentation
                         .requestMatchers(
                                 "/swagger-ui.html",

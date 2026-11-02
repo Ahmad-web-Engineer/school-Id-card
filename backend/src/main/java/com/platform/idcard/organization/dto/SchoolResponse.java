@@ -16,6 +16,11 @@ public record SchoolResponse(
         String email,
         String mobile,
         String logoFileId,
+        String signatureFileId,
+        String website,
+        String affiliationNumber,
+        String tagline,
+        String principalName,
         String status,
         Instant createdAt
 ) {
@@ -31,6 +36,11 @@ public record SchoolResponse(
                 school.getEmail(),
                 school.getMobile(),
                 school.getLogoFileId(),
+                school.getSignatureFileId(),
+                school.getWebsite(),
+                school.getAffiliationNumber(),
+                school.getTagline(),
+                school.getPrincipalName(),
                 school.getStatus(),
                 school.getCreatedAt()
         );

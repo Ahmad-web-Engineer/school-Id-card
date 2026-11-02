@@ -1,6 +1,8 @@
 package com.platform.idcard.organization.controller;
 
+import com.platform.idcard.auth.dto.ResetPasswordRequest;
 import com.platform.idcard.auth.dto.UserSummaryResponse;
+import com.platform.idcard.auth.security.SecurityUtils;
 import com.platform.idcard.common.response.ApiResponse;
 import com.platform.idcard.common.response.PagedResponse;
 import com.platform.idcard.organization.dto.*;
@@ -10,10 +12,14 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -65,6 +71,12 @@ public class AdminOrganizationController {
         return ResponseEntity.ok(ApiResponse.ok(schoolService.updateSchool(id, request)));
     }
 
+    @GetMapping("/schools/{id}/users")
+    @Operation(summary = "List school users", description = "Fetches all user accounts assigned to the school")
+    public ResponseEntity<ApiResponse<List<UserSummaryResponse>>> listSchoolUsers(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok(schoolService.getSchoolUsers(id)));
+    }
+
     @PostMapping("/schools/{id}/users")
     @Operation(summary = "Create school user", description = "Creates a login user account assigned to the school")
     public ResponseEntity<ApiResponse<UserSummaryResponse>> createSchoolUser(
@@ -73,6 +85,17 @@ public class AdminOrganizationController {
     ) {
         UserSummaryResponse response = schoolService.createSchoolUser(id, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(response));
+    }
+
+    @PostMapping(value = "/schools/{id}/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload school logo", description = "Admin uploads or updates the official logo for a school")
+    public ResponseEntity<ApiResponse<SchoolResponse>> uploadSchoolLogo(
+            @PathVariable UUID id,
+            @RequestParam("file") MultipartFile file
+    ) {
+        UUID adminUserId = SecurityUtils.getCurrentUserId();
+        SchoolResponse response = schoolService.uploadSchoolLogo(id, file, adminUserId);
+        return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
     // --- Agencies ---
@@ -110,6 +133,12 @@ public class AdminOrganizationController {
         return ResponseEntity.ok(ApiResponse.ok(agencyService.updateAgency(id, request)));
     }
 
+    @GetMapping("/agencies/{id}/users")
+    @Operation(summary = "List agency users", description = "Fetches all user accounts assigned to the agency")
+    public ResponseEntity<ApiResponse<List<UserSummaryResponse>>> listAgencyUsers(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok(agencyService.getAgencyUsers(id)));
+    }
+
     @PostMapping("/agencies/{id}/users")
     @Operation(summary = "Create agency user", description = "Creates a login user account assigned to the agency")
     public ResponseEntity<ApiResponse<UserSummaryResponse>> createAgencyUser(
@@ -118,5 +147,17 @@ public class AdminOrganizationController {
     ) {
         UserSummaryResponse response = agencyService.createAgencyUser(id, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(response));
+    }
+
+    // --- User Password Management ---
+
+    @PostMapping("/users/{userId}/reset-password")
+    @Operation(summary = "Admin Reset User Password", description = "Allows Super Admin to reset password for any school or agency user")
+    public ResponseEntity<ApiResponse<Map<String, String>>> resetUserPassword(
+            @PathVariable UUID userId,
+            @Valid @RequestBody ResetPasswordRequest request
+    ) {
+        schoolService.resetUserPassword(userId, request.newPassword());
+        return ResponseEntity.ok(ApiResponse.ok(Map.of("message", "User password reset successfully")));
     }
 }

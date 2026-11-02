@@ -13,10 +13,13 @@ import com.platform.idcard.common.response.PaginationMeta;
 import com.platform.idcard.organization.dto.CreateOrganizationUserRequest;
 import com.platform.idcard.organization.dto.SchoolRequest;
 import com.platform.idcard.organization.dto.SchoolResponse;
+import com.platform.idcard.organization.dto.UpdateSchoolSettingsRequest;
 import com.platform.idcard.organization.entity.School;
 import com.platform.idcard.organization.entity.SchoolUser;
 import com.platform.idcard.organization.repository.SchoolRepository;
 import com.platform.idcard.organization.repository.SchoolUserRepository;
+import com.platform.idcard.file.entity.FileEntity;
+import com.platform.idcard.file.service.FileStorageService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -24,7 +27,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -36,19 +41,22 @@ public class SchoolService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final FileStorageService fileStorageService;
 
     public SchoolService(
             SchoolRepository schoolRepository,
             SchoolUserRepository schoolUserRepository,
             UserRepository userRepository,
             RoleRepository roleRepository,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            FileStorageService fileStorageService
     ) {
         this.schoolRepository = schoolRepository;
         this.schoolUserRepository = schoolUserRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+        this.fileStorageService = fileStorageService;
     }
 
     public PagedResponse<SchoolResponse> getSchools(int page, int size, String search, String status) {
@@ -134,6 +142,36 @@ public class SchoolService {
     }
 
     @Transactional
+    public SchoolResponse updateSchoolSettings(UUID schoolId, UpdateSchoolSettingsRequest request) {
+        School school = schoolRepository.findById(schoolId)
+                .orElseThrow(() -> new ResourceNotFoundException("School with ID " + schoolId + " not found."));
+
+        if (request.email() != null && !request.email().isBlank() &&
+            !school.getEmail().equalsIgnoreCase(request.email().trim()) &&
+            schoolRepository.existsByEmail(request.email().trim().toLowerCase())) {
+            throw new BusinessConflictException(ErrorCode.RESOURCE_CONFLICT,
+                    "School with email '" + request.email() + "' already exists.");
+        }
+
+        school.setSchoolName(request.schoolName().trim());
+        if (request.address() != null) school.setAddress(request.address().trim());
+        if (request.city() != null) school.setCity(request.city().trim());
+        if (request.state() != null) school.setState(request.state().trim());
+        if (request.pincode() != null) school.setPincode(request.pincode().trim());
+        if (request.email() != null && !request.email().isBlank()) school.setEmail(request.email().trim().toLowerCase());
+        if (request.mobile() != null) school.setMobile(request.mobile().trim());
+        if (request.logoFileId() != null) school.setLogoFileId(request.logoFileId().trim());
+        if (request.signatureFileId() != null) school.setSignatureFileId(request.signatureFileId().trim());
+        if (request.website() != null) school.setWebsite(request.website().trim());
+        if (request.affiliationNumber() != null) school.setAffiliationNumber(request.affiliationNumber().trim());
+        if (request.tagline() != null) school.setTagline(request.tagline().trim());
+        if (request.principalName() != null) school.setPrincipalName(request.principalName().trim());
+
+        School updated = schoolRepository.save(school);
+        return SchoolResponse.fromEntity(updated);
+    }
+
+    @Transactional
     public UserSummaryResponse createSchoolUser(UUID schoolId, CreateOrganizationUserRequest request) {
         School school = schoolRepository.findById(schoolId)
                 .orElseThrow(() -> new ResourceNotFoundException("School with ID " + schoolId + " not found."));
@@ -170,5 +208,53 @@ public class SchoolService {
                 request.designation(),
                 savedUser.getStatus()
         );
+    }
+
+    public List<UserSummaryResponse> getSchoolUsers(UUID schoolId) {
+        School school = schoolRepository.findById(schoolId)
+                .orElseThrow(() -> new ResourceNotFoundException("School with ID " + schoolId + " not found."));
+        return schoolUserRepository.findBySchoolId(schoolId).stream()
+                .map(su -> new UserSummaryResponse(
+                        su.getUser().getId(),
+                        su.getUser().getFullName(),
+                        su.getUser().getEmail(),
+                        su.getUser().getMobile(),
+                        "SCHOOL",
+                        school.getId(),
+                        null,
+                        su.getDesignation(),
+                        su.getUser().getStatus()
+                ))
+                .toList();
+    }
+
+    @Transactional
+    public void resetUserPassword(UUID userId, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public SchoolResponse uploadSchoolLogo(UUID schoolId, MultipartFile file, UUID uploadedBy) {
+        School school = schoolRepository.findById(schoolId)
+                .orElseThrow(() -> new ResourceNotFoundException("School with ID " + schoolId + " not found."));
+
+        FileEntity stored = fileStorageService.storeFile(file, schoolId, uploadedBy);
+        school.setLogoFileId(stored.getId().toString());
+        School updated = schoolRepository.save(school);
+        return SchoolResponse.fromEntity(updated);
+    }
+
+    @Transactional
+    public SchoolResponse uploadSchoolSignature(UUID schoolId, MultipartFile file, UUID uploadedBy) {
+        School school = schoolRepository.findById(schoolId)
+                .orElseThrow(() -> new ResourceNotFoundException("School with ID " + schoolId + " not found."));
+
+        FileEntity stored = fileStorageService.storeFile(file, schoolId, uploadedBy);
+        school.setSignatureFileId(stored.getId().toString());
+        School updated = schoolRepository.save(school);
+        return SchoolResponse.fromEntity(updated);
     }
 }

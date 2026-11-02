@@ -6,6 +6,7 @@ import com.platform.idcard.common.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,7 +14,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/auth")
-@Tag(name = "Authentication", description = "User login, token refresh, profile and session management")
+@Tag(name = "Authentication", description = "User login, registration, token refresh, profile and session management")
 public class AuthController {
 
     private final AuthService authService;
@@ -27,6 +28,20 @@ public class AuthController {
     public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
         LoginResponse response = authService.login(request);
         return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    @PostMapping("/register-school")
+    @Operation(summary = "Public School Self-Registration", description = "Allows a new school to register with admin credentials")
+    public ResponseEntity<ApiResponse<LoginResponse>> registerSchool(@Valid @RequestBody RegisterSchoolRequest request) {
+        LoginResponse response = authService.registerSchool(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(response));
+    }
+
+    @PostMapping("/change-password")
+    @Operation(summary = "Change own password", description = "Allows logged-in user to update their password")
+    public ResponseEntity<ApiResponse<Map<String, String>>> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        authService.changePassword(request);
+        return ResponseEntity.ok(ApiResponse.ok(Map.of("message", "Password changed successfully")));
     }
 
     @PostMapping("/refresh")

@@ -206,6 +206,20 @@ export default function CardDesignerModal({
       bleedMarginMm: bleedMarginMm,
       frontDesignJson: JSON.stringify({ elements: frontElements }),
       backDesignJson: JSON.stringify({ elements: backElements }),
+      autoApprove: false,
+    });
+  };
+
+  const handleSaveAndPublish = () => {
+    setActionError(null);
+    setActionMessage(null);
+    saveVersionMutation.mutate({
+      cardWidthMm: widthMm,
+      cardHeightMm: heightMm,
+      bleedMarginMm: bleedMarginMm,
+      frontDesignJson: JSON.stringify({ elements: frontElements }),
+      backDesignJson: JSON.stringify({ elements: backElements }),
+      autoApprove: true,
     });
   };
 
@@ -381,14 +395,26 @@ export default function CardDesignerModal({
             )}
 
             <Button
-              variant="primary"
+              variant="outline"
               size="sm"
               onClick={handleSaveDraft}
               loading={saveVersionMutation.isPending}
               className="flex items-center gap-1.5"
             >
               <Save className="w-3.5 h-3.5" />
-              <span>{isLocked ? 'Save as New Draft' : 'Save Draft'}</span>
+              <span>{isLocked ? 'Save Draft' : 'Save Draft'}</span>
+            </Button>
+
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSaveAndPublish}
+              loading={saveVersionMutation.isPending}
+              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 focus-visible:ring-emerald-500"
+              title="Save and automatically approve immediately for all schools"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Save & Publish</span>
             </Button>
 
             <button

@@ -7,6 +7,7 @@ import com.platform.idcard.auth.repository.RoleRepository;
 import com.platform.idcard.organization.dto.AgencyRequest;
 import com.platform.idcard.organization.dto.CreateOrganizationUserRequest;
 import com.platform.idcard.organization.dto.SchoolRequest;
+import com.platform.idcard.organization.dto.UpdateSchoolSettingsRequest;
 import com.platform.idcard.organization.service.AgencyService;
 import com.platform.idcard.organization.service.SchoolService;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,7 @@ import java.util.UUID;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -171,5 +173,44 @@ class RoleIsolationSecurityTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
                 .andExpect(jsonPath("$.data.id", is(registeredAgencyId.toString())));
+    }
+
+    @Test
+    @DisplayName("School Settings: School user can update own institution branding, signature, and affiliation")
+    void schoolUserCanUpdateOwnSettings() throws Exception {
+        UpdateSchoolSettingsRequest updateReq = new UpdateSchoolSettingsRequest(
+                "Updated St. Xavier High School",
+                "99 Cathedral Way",
+                "Bengaluru",
+                "Karnataka",
+                "560001",
+                "principal@stxavier.edu",
+                "9876599999",
+                "logo-asset-123",
+                "sig-asset-456",
+                "https://stxavier.edu",
+                "CBSE-9988",
+                "Excellence and Virtue",
+                "Rev. Fr. Principal"
+        );
+
+        mockMvc.perform(put("/api/v1/school/profile")
+                        .header("Authorization", "Bearer " + schoolUserToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success", is(true)))
+                .andExpect(jsonPath("$.data.schoolName", is("Updated St. Xavier High School")))
+                .andExpect(jsonPath("$.data.affiliationNumber", is("CBSE-9988")))
+                .andExpect(jsonPath("$.data.website", is("https://stxavier.edu")))
+                .andExpect(jsonPath("$.data.tagline", is("Excellence and Virtue")))
+                .andExpect(jsonPath("$.data.principalName", is("Rev. Fr. Principal")));
+
+        // Role Isolation: Agency user cannot update school profile
+        mockMvc.perform(put("/api/v1/school/profile")
+                        .header("Authorization", "Bearer " + agencyUserToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateReq)))
+                .andExpect(status().isForbidden());
     }
 }

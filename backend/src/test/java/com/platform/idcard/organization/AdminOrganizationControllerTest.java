@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -20,6 +21,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -200,6 +202,46 @@ class AdminOrganizationControllerTest {
                 .andExpect(jsonPath("$.data.email", is("rajesh@speedyprints.com")))
                 .andExpect(jsonPath("$.data.role", is("PRINTING_AGENCY")))
                 .andExpect(jsonPath("$.data.agencyId", is(agencyId)));
+    }
+
+    @Test
+    @WithMockUser(roles = "SUPER_ADMIN")
+    @DisplayName("Admin can upload official logo for a registered school")
+    void shouldAllowAdminToUploadSchoolLogo() throws Exception {
+        SchoolRequest request = new SchoolRequest(
+                "Greenwood High Logo Test",
+                "GW-LOGO-" + System.currentTimeMillis() % 10000,
+                "45 Logo Blvd",
+                "Pune",
+                "Maharashtra",
+                "411001",
+                "logo_" + System.currentTimeMillis() + "@school.edu",
+                "9876543299",
+                "ACTIVE"
+        );
+
+        MvcResult result = mockMvc.perform(post("/api/v1/admin/schools")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String schoolId = objectMapper.readTree(result.getResponse().getContentAsString())
+                .path("data").path("id").asText();
+
+        MockMultipartFile logoFile = new MockMultipartFile(
+                "file",
+                "school-crest.png",
+                MediaType.IMAGE_PNG_VALUE,
+                "dummy-png-logo-bytes".getBytes()
+        );
+
+        mockMvc.perform(multipart("/api/v1/admin/schools/" + schoolId + "/logo")
+                        .file(logoFile))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success", is(true)))
+                .andExpect(jsonPath("$.data.id", is(schoolId)))
+                .andExpect(jsonPath("$.data.logoFileId", notNullValue()));
     }
 
     @Test

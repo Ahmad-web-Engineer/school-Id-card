@@ -10,7 +10,7 @@ import {
   DEFAULT_BACK_DESIGN,
   CARD_STANDARDS,
 } from './templatesConstants';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export default function CreateTemplateModal({ isOpen, onClose, onCreated }) {
   const queryClient = useQueryClient();
@@ -20,6 +20,7 @@ export default function CreateTemplateModal({ isOpen, onClose, onCreated }) {
     templateCategory: 'STUDENT',
     schoolId: '',
     preset: 'CR80_LANDSCAPE',
+    autoApprove: true,
   });
   const [formError, setFormError] = useState('');
 
@@ -65,6 +66,7 @@ export default function CreateTemplateModal({ isOpen, onClose, onCreated }) {
       cardHeightMm: standard.heightMm,
       frontDesignJson: JSON.stringify(DEFAULT_FRONT_DESIGN),
       backDesignJson: JSON.stringify(DEFAULT_BACK_DESIGN),
+      autoApprove: form.autoApprove,
     };
 
     createMutation.mutate(payload);
@@ -151,6 +153,20 @@ export default function CreateTemplateModal({ isOpen, onClose, onCreated }) {
           ]}
           hint="Global templates can be assigned to any school during academic sessions."
         />
+
+        <div className="flex items-start gap-2 pt-2 bg-emerald-50/70 p-3 rounded-lg border border-emerald-200">
+          <input
+            type="checkbox"
+            id="autoApprove"
+            checked={form.autoApprove}
+            onChange={(e) => setForm({ ...form, autoApprove: e.target.checked })}
+            className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+          />
+          <label htmlFor="autoApprove" className="text-xs text-slate-700 cursor-pointer">
+            <span className="font-semibold text-slate-900 block">Auto-Approve Initial Version</span>
+            Directly marks version 1 as APPROVED so schools can immediately view and order with this template without waiting for extra review steps.
+          </label>
+        </div>
       </form>
     </Modal>
   );

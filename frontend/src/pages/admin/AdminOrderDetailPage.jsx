@@ -72,6 +72,13 @@ export default function AdminOrderDetailPage() {
     enabled: !!id,
   });
 
+  // 1b. Fetch Platform Settings for Dynamic Pricing Defaults
+  const { data: settingsRes } = useQuery({
+    queryKey: ['admin-platform-settings'],
+    queryFn: () => api.get('/admin/settings'),
+  });
+  const platformSettings = settingsRes?.data;
+
   // Fetch Child Agency Assignments
   const { data: assignmentsRes } = useQuery({
     queryKey: ['admin-order-assignments', id],
@@ -117,10 +124,12 @@ export default function AdminOrderDetailPage() {
   const generateQuotationMutation = useMutation({
     mutationFn: () => {
       const discount = parseFloat(quoteDiscount) || 0;
+      const taxRate = platformSettings?.taxRatePercent != null ? parseFloat(platformSettings.taxRatePercent) : 18.00;
+      const validDays = platformSettings?.quotationValidityDays != null ? parseInt(platformSettings.quotationValidityDays, 10) : 15;
       return api.post(`/admin/orders/${id}/quotation`, {
         discount: discount,
-        taxRate: 18.00,
-        validDays: 15,
+        taxRate: taxRate,
+        validDays: validDays,
         notes: quoteNotes.trim() || undefined,
         items: quoteItems.map((item) => ({
           productDescription: item.itemDescription || item.productDescription || 'PVC ID Card',
@@ -139,11 +148,12 @@ export default function AdminOrderDetailPage() {
 
   // Open Quotation Modal with initial items
   const handleOpenQuotationModal = () => {
+    const defaultPvcPrice = platformSettings?.pricingPvcCard != null ? Number(platformSettings.pricingPvcCard).toFixed(2) : '45.00';
     if (order?.items) {
       const initialItems = order.items.map((i) => ({
         itemDescription: i.productType || i.itemDescription || 'PVC ID Card',
         quantity: i.quantity,
-        unitPrice: (i.unitSellingPrice && Number(i.unitSellingPrice) > 0) ? Number(i.unitSellingPrice).toFixed(2) : '45.00',
+        unitPrice: (i.unitSellingPrice && Number(i.unitSellingPrice) > 0) ? Number(i.unitSellingPrice).toFixed(2) : defaultPvcPrice,
       }));
       setQuoteItems(initialItems);
       setQuoteDiscount('0.00');

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, LogOut, ChevronRight, Shield, School, Printer } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Menu, X, LogOut, ChevronRight, Shield, School, Printer, User } from 'lucide-react';
 import Badge from '../common/Badge';
 import NotificationBell from '../../features/notifications/NotificationBell';
+import { useAuthStore } from '../../store/useAuthStore';
 
 const roleMeta = {
   SUPER_ADMIN: {
@@ -31,8 +32,29 @@ const roleMeta = {
 export default function PortalLayout({ role = 'SUPER_ADMIN', navItems = [], children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, clearAuth } = useAuthStore();
   const currentRole = roleMeta[role] || roleMeta.SUPER_ADMIN;
   const RoleIcon = currentRole.icon;
+
+  // Auto-close drawer when route changes
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  // Close drawer on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setMobileMenuOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleLogout = () => {
+    clearAuth();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <div className="min-h-full flex flex-col md:flex-row bg-slate-50">
@@ -56,10 +78,19 @@ export default function PortalLayout({ role = 'SUPER_ADMIN', navItems = [], chil
         </div>
       </header>
 
+      {/* Mobile Backdrop Overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-slate-900/60 backdrop-blur-xs md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Sidebar for Desktop & Mobile Overlay */}
       <aside
         className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-slate-100 transform transition-transform duration-200 ease-in-out md:translate-x-0 md:static md:flex md:flex-col md:h-screen ${
-          mobileMenuOpen ? 'translate-x-0' : '-translate-x-0 hidden md:flex'
+          mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 hidden md:flex'
         }`}
       >
         {/* Brand / Logo Header */}
@@ -76,7 +107,8 @@ export default function PortalLayout({ role = 'SUPER_ADMIN', navItems = [], chil
           <button
             type="button"
             onClick={() => setMobileMenuOpen(false)}
-            className="md:hidden text-slate-400 hover:text-white"
+            className="md:hidden text-slate-400 hover:text-white p-1"
+            aria-label="Close menu"
           >
             <X className="h-5 w-5" />
           </button>
@@ -108,25 +140,24 @@ export default function PortalLayout({ role = 'SUPER_ADMIN', navItems = [], chil
 
         {/* User / Logout Footer */}
         <div className="p-4 border-t border-slate-800 flex items-center justify-between bg-slate-950/40">
-          <div className="flex items-center gap-2 truncate">
-            <div className="h-7 w-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-semibold text-white">
-              U
+          <div className="flex items-center gap-2.5 truncate">
+            <div className="h-8 w-8 rounded-full bg-indigo-700/80 border border-indigo-500/30 flex items-center justify-center text-xs font-semibold text-white shrink-0">
+              {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
             </div>
             <div className="truncate">
-              <div className="text-xs font-medium text-white truncate">Authorized User</div>
-              <Badge variant={currentRole.badgeVariant} size="sm" className="mt-0.5">
-                {currentRole.badge}
-              </Badge>
+              <div className="text-xs font-medium text-white truncate">{user?.fullName || 'Authorized User'}</div>
+              <div className="text-[10px] text-slate-400 truncate">{user?.email || currentRole.badge}</div>
             </div>
           </div>
-          <Link
-            to="/login"
+          <button
+            type="button"
+            onClick={handleLogout}
             title="Log out"
             aria-label="Log out"
-            className="p-1.5 text-slate-400 hover:text-rose-400 rounded-md hover:bg-slate-800 transition-colors"
+            className="p-1.5 text-slate-400 hover:text-rose-400 rounded-md hover:bg-slate-800 transition-colors shrink-0"
           >
             <LogOut className="h-4 w-4" />
-          </Link>
+          </button>
         </div>
       </aside>
 
@@ -142,12 +173,21 @@ export default function PortalLayout({ role = 'SUPER_ADMIN', navItems = [], chil
           </div>
           <div className="flex items-center gap-4">
             <NotificationBell />
-            <Link
-              to="/design-system"
-              className="text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-md transition-colors"
-            >
-              Design System Showcase
-            </Link>
+            <div className="flex items-center gap-2.5 pl-4 border-l border-slate-200">
+              <div className="text-right">
+                <div className="text-xs font-medium text-slate-800">{user?.fullName || 'Authorized User'}</div>
+                <div className="text-[10px] text-slate-400">{currentRole.badge}</div>
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                title="Log out"
+                aria-label="Log out"
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </header>
 

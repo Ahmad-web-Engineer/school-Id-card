@@ -25,6 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -77,7 +78,7 @@ public class AgencyService {
     public AgencyResponse createAgency(AgencyRequest request) {
         if (agencyRepository.existsByEmail(request.email().trim().toLowerCase())) {
             throw new BusinessConflictException(ErrorCode.RESOURCE_CONFLICT,
-                    "Agency with email '" + request.email() + "' already exists.");
+                    "Printing agency with email '" + request.email() + "' already exists.");
         }
 
         Agency agency = new Agency();
@@ -112,7 +113,7 @@ public class AgencyService {
         if (!agency.getEmail().equalsIgnoreCase(request.email().trim()) &&
             agencyRepository.existsByEmail(request.email().trim().toLowerCase())) {
             throw new BusinessConflictException(ErrorCode.RESOURCE_CONFLICT,
-                    "Agency with email '" + request.email() + "' already exists.");
+                    "Printing agency with email '" + request.email() + "' already exists.");
         }
 
         agency.setAgencyName(request.agencyName().trim());
@@ -169,5 +170,23 @@ public class AgencyService {
                 request.designation(),
                 savedUser.getStatus()
         );
+    }
+
+    public List<UserSummaryResponse> getAgencyUsers(UUID agencyId) {
+        Agency agency = agencyRepository.findById(agencyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Agency with ID " + agencyId + " not found."));
+        return agencyUserRepository.findByAgencyId(agencyId).stream()
+                .map(au -> new UserSummaryResponse(
+                        au.getUser().getId(),
+                        au.getUser().getFullName(),
+                        au.getUser().getEmail(),
+                        au.getUser().getMobile(),
+                        "PRINTING_AGENCY",
+                        null,
+                        agency.getId(),
+                        au.getDesignation(),
+                        au.getUser().getStatus()
+                ))
+                .toList();
     }
 }

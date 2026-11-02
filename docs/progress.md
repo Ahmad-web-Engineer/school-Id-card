@@ -794,7 +794,206 @@
   - UI Rules (Responsive across 360px, 768px, 1280px, 1920px): fully verified.
 
 ### Project Completion Status
-**All 13 implementation milestones (Steps 0 through 12) are 100% complete, hardened, and verified for production release.**
+**All 13 implementation milestones (Steps 0 through 12) plus Step 13 platform enhancement & live telemetry are 100% complete, hardened, and verified for production release.**
+
+---
+
+## Step 13 Log: Account Management, Live Dashboards, Template Auto-Approval, and Platform Hardening
+
+### What Was Built
+1. **Public School Self-Registration & Account Password Management:**
+   - Database seed `V11` & `V12` adding valid BCrypt password hashes for Demo Super Admin (`admin@platform.com` / `Password123!`), Demo School (`school@greenwood.edu` / `Password123!`), and Demo Printing Agency (`agency@apexprints.com` / `Password123!`).
+   - Self-registration endpoint `POST /api/v1/auth/register-school` allowing new schools to register their institution and create their initial administrator account publicly with immediate JWT session issuance.
+   - Self password update `POST /api/v1/auth/change-password` allowing authenticated users to change their password securely.
+   - Admin user listing: `GET /api/v1/admin/schools/{id}/users` and `GET /api/v1/admin/agencies/{id}/users`.
+   - Admin password reset: `POST /api/v1/admin/users/{userId}/reset-password` allowing Super Admin to reset the password of any school or agency account.
+   - Frontend `LoginPage.jsx`: 3 one-click demo credentials buttons (`Super Admin`, `Greenwood School`, `Apex Printers`), and a full "Register School" modal.
+   - Frontend `SchoolsPage.jsx` & `AgenciesPage.jsx`: "Logins & Credentials" modal displaying user accounts with an inline password reset tool and "Add User" provisioning.
+2. **Real-Time Live Telemetry & Dashboards (Zero Mock Data - Non-Negotiable Rule 5):**
+   - Backend module `com.platform.idcard.dashboard`:
+     - DTOs: `AdminDashboardStatsResponse`, `SchoolDashboardStatsResponse`, `AgencyDashboardStatsResponse`, `RecentOrderSummary`, `RecentAgencyJobSummary`.
+     - `DashboardService.java`: Aggregates real platform metrics using JPA queries across schools, agencies, students, orders, revenue, and agency fulfillment earnings.
+     - Controllers:
+       - `AdminDashboardController.java`: `GET /api/v1/admin/dashboard/stats` (`SUPER_ADMIN`).
+       - `SchoolDashboardController.java`: `GET /api/v1/school/dashboard/stats` (`SCHOOL`, uses `SecurityUtils.getRequiredSchoolId()`).
+       - `AgencyDashboardController.java`: `GET /api/v1/agency/dashboard/stats` (`PRINTING_AGENCY`, uses `SecurityUtils.getRequiredAgencyId()`).
+   - Frontend live dashboards:
+     - `AdminDashboardPage.jsx`: Replaced static mock values with live `useQuery(['admin-dashboard-stats'])`. Displays registered schools, verified agencies, enrolled students, gross revenue (in INR), live status distribution breakdown, and recent orders stream.
+     - `SchoolDashboardPage.jsx`: Replaced static mock values with live `useQuery(['school-dashboard-stats'])`. Displays enrolled students, approved templates, active orders, delivered cards, pending quotation alert banner, and recent print orders stream.
+     - `AgencyDashboardPage.jsx`: Replaced static mock values with live `useQuery(['agency-dashboard-stats'])`. Displays assigned jobs, active in-production cards, completed batches, fulfillment earnings (in INR), daily capacity gauge, and recent jobs stream.
+3. **Template Auto-Approval:**
+   - Added `Boolean autoApprove` to `CreateCardTemplateRequest` and `CreateTemplateVersionRequest`.
+   - In `CardTemplateService.java`, when `autoApprove == true`, version is immediately assigned `approvalStatus = APPROVED`, `approvedBy` is set to the current user, `approvedAt` is stamped, and prior versions are archived.
+   - Frontend `CreateTemplateModal.jsx`: Added "Auto-Approve Initial Version" checkbox (checked by default).
+   - Frontend `CardDesignerModal.jsx`: Added "Save & Publish" button (in addition to "Save Draft"), passing `autoApprove: true` to instantly publish approved versions for school use.
+
+### How It Was Verified
+- **Backend Test Suite:** Executed `mvn test` — **160/160 automated tests passed** (0 failures, 0 errors, 0 skipped):
+  - `AccountManagementIntegrationTest` (4 tests): Public school self-registration, user password change, admin user listing and password reset, template auto-approval.
+  - `DashboardIntegrationTest` (4 tests): Admin dashboard live metrics, school dashboard live metrics, agency dashboard live metrics, strict role isolation (school/agency forbidden on admin dashboard, school forbidden on agency dashboard).
+  - All existing 152 integration and security tests passing with zero regressions.
+- **Frontend Build:** Executed `npm run build` — `vite build` completed cleanly in 7.41s with 0 errors.
+- **Non-Negotiables Verification:**
+  - Rule 1 (Zero agency data seen by school): Verified.
+  - Rule 2 (Never trust tenant IDs from request): Verified.
+  - Rule 3 (NUMERIC(14,2) and BigDecimal precision for all financial figures): Verified.
+  - Rule 5 (No mock data or placeholders): Zero hardcoded numbers in dashboards; all powered by real database queries.
+  - Rule 6 (Pagination and indexes on all list queries): Verified.
+  - Rule 7 (Standard error envelope format): Enforced centrally.
+  - Rule 8 (Jakarta validation on all requests): Enforced on all new DTOs.
+  - UI Rules (Responsive, accessible, loading/empty/error states): Enforced across all updated pages.
+
+
+---
+
+## Step 14 Log: Template Designer Typography & Formatting Controls, School Settings & Auto-Populate Assets, and Server Process Synchronization
+
+### What Was Built
+1. **School Settings & Institutional Assets (Auto-Populate Core):**
+   - **Database Migration `V13__add_school_settings_fields.sql`:**
+     - Added `signature_file_id` (UUID, nullable, FK to `files(id)`), `website` (VARCHAR(255)), `affiliation_number` (VARCHAR(100)), `tagline` (VARCHAR(255)), and `principal_name` (VARCHAR(150)) to `schools` table.
+     - Added performance indexes for institutional settings queries.
+   - **Backend Entity & DTOs:**
+     - Updated `School.java` with the new fields and accessor methods.
+     - Updated `SchoolResponse.java` record and `fromEntity` factory method.
+     - Created `UpdateSchoolSettingsRequest.java` with Jakarta Bean Validation (`@NotBlank`, `@Email`, `@Pattern`, `@Size`).
+   - **Backend Service & Controller:**
+     - Added `updateSchoolSettings(UUID schoolId, UpdateSchoolSettingsRequest request)` to `SchoolService.java` ensuring strict multi-tenant isolation.
+     - Implemented `SchoolProfileController.java`:
+       - `GET /api/v1/school/profile`: Returns full institutional profile for the authenticated school.
+       - `PUT /api/v1/school/profile`: Updates contact info, affiliation number, website, tagline, and principal name.
+       - `POST /api/v1/school/profile/logo`: Multipart image upload storing the institutional crest/logo in `files` and updating `logo_file_id`.
+       - `POST /api/v1/school/profile/signature`: Multipart image upload storing the principal/authorized signatory scan in `files` and updating `signature_file_id`.
+
+2. **Template Designer Typography, Formatting & School Placeholders:**
+   - **Constants & Dynamic Placeholders (`templatesConstants.js`):**
+     - Added `FONT_FAMILIES`: Inter, Roboto, Arial, Poppins, Montserrat, Times New Roman, Georgia, Courier New, System Default.
+     - Added school placeholders: `{{school_name}}`, `{{school_code}}`, `{{school_address}}`, `{{school_phone}}`, `{{school_email}}`, `{{school_website}}`, `{{affiliation_number}}`, `{{school_tagline}}`, `{{principal_name}}`.
+     - Updated `SAMPLE_STUDENT_DATA` with default institutional assets and signature for design previews.
+   - **Property Inspector Enhancements (`PropertyInspector.jsx`):**
+     - Added Font Family selector and dual slider + numeric font size input (4–36 pt).
+     - Added format toggle bar: **B** (Bold), *I* (Italic), <u>U</u> (Underline), **TT** (Uppercase).
+     - Added Font Weight dropdown (400, 500, 600, 700, 800) and Letter Spacing selector.
+     - Added Text Alignment options: Left, Center, Right, Justify.
+     - Added Color picker with hex input and quick palette swatches.
+     - Added Text Background fill / Pill badge options: Background color, Clear button, and Corner Radius slider.
+     - Added categorized placeholder chips with instant single-click insertion.
+   - **Interactive Canvas Rendering (`CardCanvas.jsx`):**
+     - Rendered all typography properties: `fontFamily`, `fontSize`, `fontWeight`, `fontStyle`, `textDecoration`, `textTransform`, `letterSpacing`, `lineHeight`, `color`, `textAlign`, `backgroundColor`, and `borderRadius`.
+     - Automatically renders `school_logo` image element with `activeStudentData.school_logo_url`.
+     - Automatically renders `signature` element with `activeStudentData.signature_url` over the principal designation.
+
+3. **Frontend School Settings & Staff Portal:**
+   - **`SchoolProfilePage.jsx`:** Rebuilt into a comprehensive School Settings workspace featuring Institution Identity & Branding, Logo and Signature upload dropzones with real-time previews, Contact & Campus Location, and a Live Card Preview demonstrating auto-population.
+   - **`TeachersStaffPage.jsx`:** Created dedicated staff roster workspace to handle `/school/teachers`.
+   - **`SchoolLayout.jsx` & `App.jsx`:** Configured navigation links for "School Settings" (`/school/profile` and `/school/settings`) and `/school/teachers`.
+
+4. **Backend Server Synchronization:**
+   - Terminated outdated background process and synchronized with latest Spring Boot build on port 8081.
+   - Verified live HTTP endpoints:
+     - `GET /api/v1/health` -> 200 UP.
+     - `GET /api/v1/admin/dashboard/stats` -> 200 OK with live aggregates.
+     - `GET /api/v1/school/dashboard/stats` -> 200 OK with live aggregates.
+     - `GET /api/v1/school/profile` -> 200 OK with school institutional data.
+     - `PUT /api/v1/school/profile` -> 200 OK with persisted settings updates.
+
+### How It Was Verified
+- **Backend Test Suite:** Executed `mvn test` — **161/161 automated tests passed** (0 failures, 0 errors, 0 skipped):
+  - `RoleIsolationSecurityTest` (5 tests passing, including `schoolUserCanUpdateOwnSettings` and agency 403 forbidden isolation).
+  - `AccountManagementIntegrationTest` (4 tests).
+  - `DashboardIntegrationTest` (4 tests).
+  - `CardTemplateIntegrationTest` (5 tests).
+  - `CardTemplateSecurityTest` (23 tests).
+  - `OrderWorkflowIntegrationTest`, `ProductionWorkflowIntegrationTest`, `DispatchWorkflowIntegrationTest`, `FinancialSettlementIntegrationTest`, `StudentImportIntegrationTest`, `PhotoImportIntegrationTest`, and all other modules passing with 0 regressions.
+- **Frontend Build:** Executed `npm run build` — `vite build` completed cleanly in 5.58s with 0 errors.
+- **Live HTTP Endpoint Verification:**
+  - Authenticated as `admin@platform.com` (`Password123!`): `GET /api/v1/admin/dashboard/stats` returned 200 OK with live totals (`totalSchools: 2`, `totalAgencies: 1`, `totalStudents: 3`).
+  - Authenticated as `school@greenwood.edu` (`Password123!`): `GET /api/v1/school/dashboard/stats` returned 200 OK with live totals (`enrolledStudents: 3`, `approvedTemplates: 2`).
+  - Tested `PUT /api/v1/school/profile`: successfully updated website, affiliation number, tagline, and principal name; changes persisted and returned in subsequent GET.
+- **Non-Negotiables Verification:**
+  - Rule 1 (Zero agency data seen by school): School endpoints only access school data; agency cannot access school settings.
+  - Rule 2 (Never trust tenant IDs from request): School ID resolved strictly from JWT security context.
+  - Rule 5 (No mock data or placeholders): Real database queries for all statistics and profile settings.
+  - Rule 7 (Standard error format): Global exception handler format enforced across all profile endpoints.
+  - Rule 8 (Jakarta validation): `@NotBlank`, `@Email`, `@Pattern`, `@Size` on `UpdateSchoolSettingsRequest`.
+
+### What Is Next
+- User testing and feedback on template designer typography styling and automated card generation.
+
+---
+
+## Step 13 Log: UI Navigation & Logout Fixes, Admin Printing Charges & Platform Settings, School Logo Upload
+
+### What Was Built
+1. **Navbar Collapse & Logout Functional Hardening (`PortalLayout.jsx`):**
+   - **Click-Outside & Escape Dismissal:** Added a fixed mobile backdrop overlay (`fixed inset-0 z-30 bg-slate-900/60 backdrop-blur-xs md:hidden`) with click listener to automatically collapse the mobile navigation drawer when clicking outside.
+   - **Auto-Collapse on Navigation:** Added a `useEffect` hook listening to `location.pathname` to instantly close the mobile menu whenever any navigation link is tapped.
+   - **Keyboard Accessibility:** Added `Escape` key listener to collapse the drawer.
+   - **Reliable Logout:** Replaced the static `<Link to="/login">` with an explicit `handleLogout` handler invoking `clearAuth()` from `useAuthStore` and `navigate('/login', { replace: true })`, completely purging tokens and user session state from `localStorage` and memory.
+   - **Header & Sidebar User Context:** Displayed authenticated user name, email, and role badge dynamically from `useAuthStore` in both the sidebar footer and top navigation header, with quick-logout buttons on both mobile and desktop.
+
+2. **Total Removal of `/design-system` Showcase:**
+   - Deleted `frontend/src/pages/DesignSystemShowcasePage.jsx`.
+   - Removed `/design-system` route from `App.jsx`.
+   - Removed header showcase link button from `PortalLayout.jsx` and `LoginPage.jsx` fallback links.
+   - Verified 0 remaining references to `design-system` across the entire codebase.
+
+3. **Admin Printing Charges & Platform Settings (`/admin/settings`):**
+   - **Database Migration `V14__init_platform_settings.sql`:**
+     - Created `platform_settings` table (`setting_key VARCHAR(100) PRIMARY KEY`, `setting_value TEXT NOT NULL`, `category VARCHAR(50) NOT NULL`, `description TEXT`, `updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP`).
+     - Seeded default baseline rates and parameters:
+       - `PRICING_PVC_CARD` = '45.00' (PVC ID card unit selling price in INR)
+       - `PRICING_RFID_CARD` = '95.00' (RFID smart card unit selling price in INR)
+       - `PRICING_LANYARD` = '18.00' (Custom lanyard ribbon price in INR)
+       - `PRICING_CARD_HOLDER` = '12.00' (Protective card pouch price in INR)
+       - `PRICING_RUSH_FEE` = '20.00' (Express surcharge per card in INR)
+       - `AGENCY_COST_PER_CARD` = '25.00' (Default manufacturing cost paid to printing agencies)
+       - `TAX_RATE_PERCENT` = '18.00' (Default GST percentage)
+       - `FLAT_SHIPPING_FEE` = '150.00' (Flat courier/delivery fee in INR)
+       - `MIN_ORDER_QUANTITY` = '25' (Minimum order quantity)
+       - `PAYMENT_DUE_DAYS` = '30' (Credit payment terms in days)
+       - `QUOTATION_VALIDITY_DAYS` = '15' (Quotation validity in days)
+       - `DEFAULT_DELIVERY_MODEL` = 'DIRECT_TO_SCHOOL'
+       - `PLATFORM_CURRENCY` = 'INR'
+   - **Backend Domain (`com.platform.idcard.settings`):**
+     - Implemented `PlatformSetting` JPA Entity and `PlatformSettingRepository`.
+     - Implemented `PlatformSettingsResponse` DTO and `UpdatePlatformSettingsRequest` with Jakarta Bean validation (`@DecimalMin(value = "0.00")`, `@Min(1)`, `@NotBlank`) ensuring strict preservation of **Non-negotiable Rule 3** (money values use `NUMERIC(14,2)` and cannot be negative).
+     - Implemented `PlatformSettingService` with atomic transactional updates.
+     - Implemented `AdminSettingsController` (`GET /api/v1/admin/settings`, `PUT /api/v1/admin/settings`) guarded strictly by `hasRole('SUPER_ADMIN')`.
+   - **Frontend Workspace (`AdminSettingsPage.jsx`):**
+     - Created comprehensive Super Admin settings screen featuring:
+       - Card 1: School ID Card Base Selling Charges (PVC, RFID, Lanyard, Pouch, Rush Fee).
+       - Card 2: Agency Production & Manufacturing Rates (Base cost disbursed to agency, MOQ).
+       - Card 3: Taxes, Shipping & Commercial Terms (GST %, Flat courier charge, Quotation validity, Payment due days).
+       - Card 4: Operations & Fulfillment Policy (Default delivery routing model, Platform currency).
+       - Sidebar: Real-time Unit Economics & Margin Preview showing live gross margin (₹ and %) per card.
+     - Registered in `AdminLayout.jsx` (`Settings & Pricing` nav item with `SlidersHorizontal` icon) and `App.jsx` under `/admin/settings`.
+     - Integrated `platformSettings` into `AdminOrderDetailPage.jsx` so quotation generation dynamically pulls default card pricing and GST rates.
+
+4. **School Logo Upload Option in Admin & School Portals:**
+   - **Backend Endpoint in `AdminOrganizationController.java`:**
+     - Added `@PostMapping(value = "/schools/{id}/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)` allowing Super Admin to upload or replace official logos for any school.
+     - Enhanced `SchoolService.uploadSchoolLogo` to centralize file storage via `FileStorageService`, update `school.logoFileId`, and return `SchoolResponse`.
+   - **Admin Schools Management (`SchoolsPage.jsx`):**
+     - Table now renders school logo emblem thumbnails for all registered institutions with initial fallback avatars.
+     - Added a dedicated "Logo" action button in the schools table.
+     - Added `Modal` for logo uploads with real-time preview, file picker, file size feedback, and mutation updating the live table.
+   - **School Portal (`SchoolLayout.jsx`):**
+     - Renamed navigation menu item to "School Profile & Logo" (`/school/profile`) for immediate clarity.
+
+### How It Was Verified
+- **Backend Test Suite:** Executed `mvn test` — **167/167 automated tests passed** (0 failures, 0 errors, 0 skipped):
+  - `AdminSettingsControllerTest` (5 tests passing: fetch settings, update settings, reject negative prices with validation error, 403 ACCESS_DENIED for school users, 403 ACCESS_DENIED for agency users).
+  - `AdminOrganizationControllerTest` (5 tests passing, including `shouldAllowAdminToUploadSchoolLogo`).
+  - All existing test suites across auth, orders, templates, delivery, finance, students, and notifications passed with 0 regressions.
+- **Frontend Production Build:** Executed `npm run build` — `vite build` completed cleanly in 6.86s with 0 errors.
+- **Live HTTP Endpoint Verification:**
+  - Authenticated as `admin@platform.com`: `GET /api/v1/admin/settings` returned 200 OK with all 13 active settings.
+  - Tested mobile drawer collapse, click-outside backdrop, and logout clearance.
+  - Verified `GET /design-system` returns 404 (removed).
+
+### What Is Next
+- All user-requested fixes and capabilities are fully implemented, verified, and operational. Ready for deployment and live demo.
 
 ---
 

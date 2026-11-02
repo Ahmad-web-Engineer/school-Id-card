@@ -1,6 +1,21 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
-import { LayoutDashboard, School, Building2, Users, Palette, ShoppingBag, Briefcase, Printer, CheckCircle, Truck, DollarSign, BarChart3, History } from 'lucide-react';
+import { 
+  LayoutDashboard, 
+  School, 
+  Building2, 
+  Users, 
+  Palette, 
+  ShoppingBag, 
+  Briefcase, 
+  Printer, 
+  CheckCircle, 
+  Truck, 
+  DollarSign, 
+  BarChart3, 
+  History,
+  SlidersHorizontal
+} from 'lucide-react';
 import PortalLayout from './PortalLayout';
 
 const adminNavItems = [
@@ -17,6 +32,7 @@ const adminNavItems = [
   { label: 'Finance', path: '/admin/finance', icon: DollarSign },
   { label: 'Reports', path: '/admin/reports', icon: BarChart3 },
   { label: 'Audit Logs', path: '/admin/audit-logs', icon: History },
+  { label: 'Settings & Pricing', path: '/admin/settings', icon: SlidersHorizontal },
 ];
 
 export default function AdminLayout() {

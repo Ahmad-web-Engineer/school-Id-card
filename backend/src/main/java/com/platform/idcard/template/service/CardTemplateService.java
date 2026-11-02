@@ -158,7 +158,13 @@ public class CardTemplateService {
                         ? request.backDesignJson()
                         : "{\"elements\":[]}"
         );
-        version1.setApprovalStatus(TemplateApprovalStatus.DRAFT.name());
+        if (Boolean.TRUE.equals(request.autoApprove())) {
+            version1.setApprovalStatus(TemplateApprovalStatus.APPROVED.name());
+            version1.setApprovedBy(SecurityUtils.getCurrentUserId());
+            version1.setApprovedAt(Instant.now());
+        } else {
+            version1.setApprovalStatus(TemplateApprovalStatus.DRAFT.name());
+        }
         version1.setCreatedBy(SecurityUtils.getCurrentUserId());
         version1 = templateVersionRepository.save(version1);
 
@@ -214,7 +220,19 @@ public class CardTemplateService {
         version.setBleedMarginMm(request.bleedMarginMm() != null ? request.bleedMarginMm() : new BigDecimal("3.00"));
         version.setFrontDesignJson(request.frontDesignJson());
         version.setBackDesignJson(request.backDesignJson());
-        version.setApprovalStatus(TemplateApprovalStatus.DRAFT.name());
+        if (Boolean.TRUE.equals(request.autoApprove())) {
+            version.setApprovalStatus(TemplateApprovalStatus.APPROVED.name());
+            version.setApprovedBy(SecurityUtils.getCurrentUserId());
+            version.setApprovedAt(Instant.now());
+            // Archive prior approved versions
+            templateVersionRepository.findByTemplateIdAndApprovalStatus(templateId, TemplateApprovalStatus.APPROVED.name())
+                    .forEach(prev -> {
+                        prev.setApprovalStatus(TemplateApprovalStatus.ARCHIVED.name());
+                        templateVersionRepository.save(prev);
+                    });
+        } else {
+            version.setApprovalStatus(TemplateApprovalStatus.DRAFT.name());
+        }
         version.setCreatedBy(SecurityUtils.getCurrentUserId());
 
         version = templateVersionRepository.save(version);

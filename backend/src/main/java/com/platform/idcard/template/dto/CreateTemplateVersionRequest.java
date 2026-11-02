@@ -26,5 +26,14 @@ public record CreateTemplateVersionRequest(
         String frontDesignJson,
 
         @NotBlank(message = "Back design JSON is required")
-        String backDesignJson
-) {}
+        String backDesignJson,
+
+        Boolean autoApprove
+) {
+    public CreateTemplateVersionRequest(
+            BigDecimal cardWidthMm, BigDecimal cardHeightMm, BigDecimal bleedMarginMm,
+            String frontDesignJson, String backDesignJson
+    ) {
+        this(cardWidthMm, cardHeightMm, bleedMarginMm, frontDesignJson, backDesignJson, false);
+    }
+}

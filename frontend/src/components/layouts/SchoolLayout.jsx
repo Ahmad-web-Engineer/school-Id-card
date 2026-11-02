@@ -5,7 +5,7 @@ import PortalLayout from './PortalLayout';
 
 const schoolNavItems = [
   { label: 'Dashboard', path: '/school', icon: LayoutDashboard },
-  { label: 'School Profile', path: '/school/profile', icon: School },
+  { label: 'School Profile & Logo', path: '/school/profile', icon: School },
   { label: 'Students', path: '/school/students', icon: Users },
   { label: 'Teachers & Staff', path: '/school/teachers', icon: UserCheck },
   { label: 'Card Templates', path: '/school/templates', icon: Palette },

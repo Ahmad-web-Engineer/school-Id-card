@@ -35,4 +35,17 @@ public interface PrintingOrderRepository extends JpaRepository<PrintingOrder, UU
 
     @Query("SELECT COUNT(o) FROM PrintingOrder o WHERE o.school.id = :schoolId")
     long countBySchoolId(@Param("schoolId") UUID schoolId);
+
+    long countByOrderStatus(String orderStatus);
+
+    long countBySchoolIdAndOrderStatus(UUID schoolId, String orderStatus);
+
+    @Query("SELECT COUNT(o) FROM PrintingOrder o WHERE o.orderStatus IN :statuses")
+    long countByOrderStatusIn(@Param("statuses") java.util.Collection<String> statuses);
+
+    @Query("SELECT COUNT(o) FROM PrintingOrder o WHERE o.school.id = :schoolId AND o.orderStatus IN :statuses")
+    long countBySchoolIdAndOrderStatusIn(@Param("schoolId") UUID schoolId, @Param("statuses") java.util.Collection<String> statuses);
+
+    @Query("SELECT o.orderStatus, COUNT(o) FROM PrintingOrder o GROUP BY o.orderStatus")
+    java.util.List<Object[]> countGroupByOrderStatus();
 }

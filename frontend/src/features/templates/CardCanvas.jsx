@@ -175,11 +175,21 @@ export default function CardCanvas({
               {el.type === 'text' && (
                 <div
                   style={{
+                    fontFamily: el.fontFamily || 'Inter, sans-serif',
                     fontSize: `${(el.fontSize || 8) * (scale / 4)}px`,
-                    fontWeight: el.fontWeight || 'normal',
+                    fontWeight: el.fontWeight || (el.bold ? 'bold' : 'normal'),
+                    fontStyle: el.fontStyle || (el.italic ? 'italic' : 'normal'),
+                    textDecoration: el.textDecoration || (el.underline ? 'underline' : 'none'),
+                    textTransform: el.textTransform || 'none',
+                    letterSpacing: el.letterSpacing ? `${el.letterSpacing * (scale / 4)}px` : 'normal',
+                    lineHeight: el.lineHeight || 1.25,
                     color: el.color || '#0f172a',
                     textAlign: el.textAlign || 'left',
-                    lineHeight: 1.25,
+                    backgroundColor: el.backgroundColor || 'transparent',
+                    borderRadius: el.borderRadius ? `${el.borderRadius * scale}px` : 0,
+                    borderColor: el.borderColor || 'transparent',
+                    borderWidth: el.borderWidth ? `${el.borderWidth}px` : 0,
+                    padding: el.backgroundColor && el.backgroundColor !== 'transparent' ? '2px 4px' : 0,
                   }}
                   className="w-full h-full flex flex-col justify-center overflow-hidden whitespace-pre-wrap break-words"
                 >
@@ -215,12 +225,20 @@ export default function CardCanvas({
                       </div>
                     )
                   ) : el.field === 'school_logo' ? (
-                    <div className="flex flex-col items-center justify-center p-0.5 text-indigo-700 bg-indigo-50 w-full h-full">
-                      <Sparkles className="w-5 h-5 text-indigo-600" />
-                      <span className="text-[6px] font-bold uppercase tracking-wider text-indigo-900">
-                        Logo
-                      </span>
-                    </div>
+                    activeStudentData?.school_logo_url || activeStudentData?.logoUrl ? (
+                      <img
+                        src={activeStudentData.school_logo_url || activeStudentData.logoUrl}
+                        alt="School Logo"
+                        className="w-full h-full object-contain p-0.5"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-0.5 text-indigo-700 bg-indigo-50 w-full h-full">
+                        <Sparkles className="w-5 h-5 text-indigo-600" />
+                        <span className="text-[6px] font-bold uppercase tracking-wider text-indigo-900">
+                          Logo
+                        </span>
+                      </div>
+                    )
                   ) : (
                     <div className="flex flex-col items-center justify-center text-slate-400">
                       <ImageIcon className="w-6 h-6" />
@@ -315,10 +333,17 @@ export default function CardCanvas({
                     borderWidth: el.borderWidth ? `${el.borderWidth}px` : 1,
                     borderRadius: el.borderRadius ? `${el.borderRadius * 2}px` : 2,
                   }}
-                  className="w-full h-full border-dashed bg-slate-50/60 p-1 flex flex-col justify-end items-center"
+                  className="w-full h-full border-dashed bg-slate-50/60 p-1 flex flex-col justify-end items-center relative overflow-hidden"
                 >
+                  {activeStudentData?.signature_url || activeStudentData?.signatureUrl ? (
+                    <img
+                      src={activeStudentData.signature_url || activeStudentData.signatureUrl}
+                      alt="Signature"
+                      className="max-h-[60%] max-w-[90%] object-contain mb-0.5"
+                    />
+                  ) : null}
                   <div className="w-4/5 border-t border-slate-400 mb-0.5" />
-                  <span className="text-[6.5px] font-medium text-slate-500 uppercase tracking-wider text-center">
+                  <span className="text-[6.5px] font-medium text-slate-500 uppercase tracking-wider text-center leading-none">
                     {el.label || 'Principal Signature'}
                   </span>
                 </div>

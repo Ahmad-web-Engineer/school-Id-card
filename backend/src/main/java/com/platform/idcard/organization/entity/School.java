@@ -39,6 +39,21 @@ public class School {
     @Column(name = "logo_file_id", length = 255)
     private String logoFileId;
 
+    @Column(name = "signature_file_id", length = 255)
+    private String signatureFileId;
+
+    @Column(name = "website", length = 200)
+    private String website;
+
+    @Column(name = "affiliation_number", length = 100)
+    private String affiliationNumber;
+
+    @Column(name = "tagline", length = 300)
+    private String tagline;
+
+    @Column(name = "principal_name", length = 150)
+    private String principalName;
+
     @Column(name = "status", nullable = false, length = 30)
     private String status = "ACTIVE";
 
@@ -139,6 +154,46 @@ public class School {
 
     public void setLogoFileId(String logoFileId) {
         this.logoFileId = logoFileId;
+    }
+
+    public String getSignatureFileId() {
+        return signatureFileId;
+    }
+
+    public void setSignatureFileId(String signatureFileId) {
+        this.signatureFileId = signatureFileId;
+    }
+
+    public String getWebsite() {
+        return website;
+    }
+
+    public void setWebsite(String website) {
+        this.website = website;
+    }
+
+    public String getAffiliationNumber() {
+        return affiliationNumber;
+    }
+
+    public void setAffiliationNumber(String affiliationNumber) {
+        this.affiliationNumber = affiliationNumber;
+    }
+
+    public String getTagline() {
+        return tagline;
+    }
+
+    public void setTagline(String tagline) {
+        this.tagline = tagline;
+    }
+
+    public String getPrincipalName() {
+        return principalName;
+    }
+
+    public void setPrincipalName(String principalName) {
+        this.principalName = principalName;
     }
 
     public String getStatus() {

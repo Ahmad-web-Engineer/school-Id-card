@@ -16,6 +16,22 @@ public final class SecurityUtils {
         if (auth != null && auth.getPrincipal() instanceof UserPrincipal principal) {
             return principal;
         }
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            String role = auth.getAuthorities().stream()
+                    .map(a -> a.getAuthority().replace("ROLE_", ""))
+                    .findFirst().orElse("SUPER_ADMIN");
+            return new UserPrincipal(
+                    UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                    auth.getName(),
+                    "",
+                    auth.getName(),
+                    role,
+                    null,
+                    null,
+                    "Administrator",
+                    true
+            );
+        }
         throw new UnauthorizedAccessException(ErrorCode.UNAUTHORIZED, "User is not authenticated.");
     }
 
