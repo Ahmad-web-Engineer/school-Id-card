@@ -22,9 +22,9 @@ public interface PrintingOrderRepository extends JpaRepository<PrintingOrder, UU
             SELECT o FROM PrintingOrder o
             WHERE (:schoolId IS NULL OR o.school.id = :schoolId)
               AND (:status IS NULL OR o.orderStatus = :status)
-              AND (:search IS NULL OR LOWER(o.orderNumber) LIKE LOWER(CONCAT('%', :search, '%'))
-                   OR LOWER(o.contactPerson) LIKE LOWER(CONCAT('%', :search, '%'))
-                   OR LOWER(o.school.schoolName) LIKE LOWER(CONCAT('%', :search, '%')))
+              AND (:search IS NULL OR LOWER(o.orderNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+                   OR LOWER(o.contactPerson) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+                   OR LOWER(o.school.schoolName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))
             """)
     Page<PrintingOrder> findWithFilters(
             @Param("schoolId") UUID schoolId,

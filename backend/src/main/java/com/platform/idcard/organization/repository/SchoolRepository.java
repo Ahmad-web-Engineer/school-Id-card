@@ -19,8 +19,8 @@ public interface SchoolRepository extends JpaRepository<School, UUID> {
 
     @Query("SELECT s FROM School s WHERE " +
            "(:status IS NULL OR s.status = :status) AND " +
-           "(:search IS NULL OR LOWER(s.schoolName) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           " LOWER(s.schoolCode) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           " LOWER(s.city) LIKE LOWER(CONCAT('%', :search, '%')))")
+           "(:search IS NULL OR LOWER(s.schoolName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+           " LOWER(s.schoolCode) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+           " LOWER(s.city) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))")
     Page<School> searchSchools(@Param("search") String search, @Param("status") String status, Pageable pageable);
 }

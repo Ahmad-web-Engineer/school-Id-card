@@ -18,11 +18,11 @@ public interface CardTemplateRepository extends JpaRepository<CardTemplate, UUID
 
     @Query(
             value = "SELECT t FROM CardTemplate t WHERE " +
-                    "(:search IS NULL OR LOWER(t.templateName) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +
+                    "(:search IS NULL OR LOWER(t.templateName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))) AND " +
                     "(:category IS NULL OR t.templateCategory = :category) AND " +
                     "(:status IS NULL OR t.status = :status)",
             countQuery = "SELECT count(t) FROM CardTemplate t WHERE " +
-                    "(:search IS NULL OR LOWER(t.templateName) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +
+                    "(:search IS NULL OR LOWER(t.templateName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))) AND " +
                     "(:category IS NULL OR t.templateCategory = :category) AND " +
                     "(:status IS NULL OR t.status = :status)"
     )

@@ -18,7 +18,7 @@ public interface AgencyRepository extends JpaRepository<Agency, UUID> {
 
     @Query("SELECT a FROM Agency a WHERE " +
            "(:status IS NULL OR a.status = :status) AND " +
-           "(:search IS NULL OR LOWER(a.agencyName) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           " LOWER(a.contactPerson) LIKE LOWER(CONCAT('%', :search, '%')))")
+           "(:search IS NULL OR LOWER(a.agencyName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+           " LOWER(a.contactPerson) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))")
     Page<Agency> searchAgencies(@Param("search") String search, @Param("status") String status, Pageable pageable);
 }

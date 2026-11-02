@@ -39,9 +39,9 @@ public interface StudentRepository extends JpaRepository<Student, UUID> {
            "(:status IS NULL OR s.status = :status) AND " +
            "(:className IS NULL OR s.className = :className) AND " +
            "(:section IS NULL OR s.section = :section) AND " +
-           "(:search IS NULL OR LOWER(s.studentName) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           " LOWER(s.admissionNumber) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           " LOWER(s.rollNumber) LIKE LOWER(CONCAT('%', :search, '%')))")
+           "(:search IS NULL OR LOWER(s.studentName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+           " LOWER(s.admissionNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+           " LOWER(s.rollNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))")
     Page<Student> searchStudents(
             @Param("schoolId") UUID schoolId,
             @Param("search") String search,

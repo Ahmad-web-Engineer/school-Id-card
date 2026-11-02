@@ -32,9 +32,9 @@ public interface AgencyAssignmentRepository extends JpaRepository<AgencyAssignme
           AND (:agencyId IS NULL OR a.agency.id = :agencyId)
           AND (:status IS NULL OR a.assignmentStatus = :status)
           AND (:search IS NULL OR (
-                LOWER(a.assignmentNumber) LIKE LOWER(CONCAT('%', :search, '%'))
-             OR LOWER(a.agency.agencyName) LIKE LOWER(CONCAT('%', :search, '%'))
-             OR LOWER(a.order.orderNumber) LIKE LOWER(CONCAT('%', :search, '%'))
+                LOWER(a.assignmentNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+             OR LOWER(a.agency.agencyName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+             OR LOWER(a.order.orderNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
           ))
         ORDER BY a.createdAt DESC
     """)
@@ -51,7 +51,7 @@ public interface AgencyAssignmentRepository extends JpaRepository<AgencyAssignme
         WHERE a.agency.id = :agencyId
           AND (:status IS NULL OR a.assignmentStatus = :status)
           AND (:search IS NULL OR (
-                LOWER(a.assignmentNumber) LIKE LOWER(CONCAT('%', :search, '%'))
+                LOWER(a.assignmentNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
           ))
         ORDER BY a.createdAt DESC
     """)
