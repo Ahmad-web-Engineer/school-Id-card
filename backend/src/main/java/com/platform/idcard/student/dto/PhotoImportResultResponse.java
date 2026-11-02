@@ -7,6 +7,7 @@ import java.util.UUID;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record PhotoImportResultResponse(
+        UUID id,
         String fileName,
         String parsedClass,
         String parsedSection,
@@ -14,11 +15,13 @@ public record PhotoImportResultResponse(
         UUID studentId,
         String studentName,
         String admissionNumber,
+        UUID photoFileId,
         String matchStatus,
         String message
 ) {
     public static PhotoImportResultResponse fromEntity(PhotoImportResult entity) {
         return new PhotoImportResultResponse(
+                entity.getId(),
                 entity.getFileName(),
                 entity.getParsedClass(),
                 entity.getParsedSection(),
@@ -26,6 +29,7 @@ public record PhotoImportResultResponse(
                 entity.getMatchedStudent() != null ? entity.getMatchedStudent().getId() : null,
                 entity.getMatchedStudent() != null ? entity.getMatchedStudent().getStudentName() : null,
                 entity.getMatchedStudent() != null ? entity.getMatchedStudent().getAdmissionNumber() : null,
+                entity.getPhotoFile() != null ? entity.getPhotoFile().getId() : null,
                 entity.getMatchStatus(),
                 entity.getMessage()
         );

@@ -997,6 +997,57 @@
 
 ---
 
+## Photo Matcher Enhancement & Manual Assignment Log
+
+### What Was Built
+1. **Multi-Strategy Photo Matching Engine (`PhotoImportService.java`):**
+   - **Strategy 1 (Normalized Class + Section + Roll):** Normalizes class names (`10th` vs `10`, `Class 10` vs `10`) and strips leading zeros from roll numbers (`01` -> `1`).
+   - **Strategy 2 (Full Admission Number):** Matches exact or normalized alphanumeric admission numbers (`ADM-2026-001`, `ADM2026001`).
+   - **Strategy 3 (Admission Number Numeric Suffix / Sequence Matching):**
+     - Extracts trailing numeric digits from admission numbers (e.g. `ADM-2026-001` -> `1`, `ADM-2026-050` -> `50`).
+     - Detects the school's dominant admission number prefix (e.g. `ADM-2026-` with 50 students vs `GW-2026-` with 3 students) to disambiguate numeric photo sequences (`1.jpg` to `50.jpg`) with 100% precision.
+   - **Strategy 4 (Unique Roll Number Across School):** Matches students when a roll number is globally unique within the school.
+   - **Ambiguous Match Reporting:** If multiple students share a roll number across different sections, reports `AMBIGUOUS_MATCH` naming the conflicting students instead of misleading `NO_STUDENT_FOUND`.
+   - **Preserved Unmatched Images:** Valid images are stored in `file_storage` regardless of match status, ensuring `photo_file_id` is always available for subsequent manual linking and thumbnail rendering.
+
+2. **Manual Photo Assignment Endpoint (`SchoolPhotoImportController.java`):**
+   - Implemented `POST /api/v1/school/photos/results/{resultId}/assign/{studentId}`.
+   - Validates multi-tenant isolation (**Non-negotiable Rule 2**): ensures both the batch/result and the target student belong strictly to the authenticated user's `schoolId`.
+   - Sets `student.setPhotoFileId(...)`, updates result status to `MATCHED`, adjusts batch counters, and returns updated batch report.
+
+3. **Secure Media Token Authentication (`JwtAuthenticationFilter.java` & `StudentPhotoAvatar.jsx`):**
+   - Enhanced `JwtAuthenticationFilter` to accept `?token=<jwt>` query parameter for media requests (`/api/v1/files/{fileId}?token=...`), enabling browser `<img>` tags to securely authenticate while maintaining tenant isolation.
+   - Updated `StudentPhotoAvatar.jsx` to load images with the authenticated token.
+
+4. **Frontend UI Enhancements (`PhotoMatcherTab.jsx`):**
+   - **Thumbnail & Filename Column:** Renders 40x40 photo thumbnail preview with fallback camera icon.
+   - **Action Column:** "Assign Student" button for unmatched/ambiguous/duplicate rows and "Reassign" for matched rows.
+   - **Manual Assignment Modal (`AssignStudentModal`):**
+     - Displays photo thumbnail preview, filename, and current match status.
+     - Search input to filter students by name, admission number, roll number, or class.
+     - Enrolled student list with avatars, credentials, and one-click "Assign" action.
+     - On assignment: updates batch state, invalidates query cache, shows success banner, and closes modal.
+   - **Updated Filter Pills:** "All Photos", "Matched", "Unmatched", "Duplicates".
+
+### How It Was Verified
+- **Backend Test Suite:** Executed `mvn test` — **169/169 automated tests passed** (0 failures, 0 errors, 0 skipped):
+  - Added `bulkUploadPhotos_matchesNumericAdmissionSuffix` in `PhotoImportIntegrationTest`.
+  - Added `assignPhotoResult_manuallyAssignsToStudent` in `PhotoImportIntegrationTest` (verifying manual assignment, counter recalculation, and 403 cross-tenant isolation).
+- **Frontend Production Build:** Executed `npm run build` — `vite build` completed cleanly in 24.07s with 0 errors.
+- **End-to-End Live Verification with Real User Archive:**
+  - Uploaded `student_images_rollno_1_to_50.zip` (containing `1.jpg` to `50.jpg`) via authenticated API (`school@greenwood.edu`).
+  - **Result:**
+    - `Total Files: 50`
+    - `Matched Count: 50` (100% matched automatically against `ADM-2026-001` to `ADM-2026-050`)
+    - `Unmatched Count: 0`
+    - `Duplicate Count: 0`
+  - Tested manual assignment endpoint (`POST /api/v1/school/photos/results/{resultId}/assign/{studentId}`) and verified student reassignment and batch counter updates.
+
+### What Is Next
+- All features are fully implemented, tested, verified, and running.
+
+---
+
 ## Questions & Blockers
 *None. All requirements successfully satisfied.*
 

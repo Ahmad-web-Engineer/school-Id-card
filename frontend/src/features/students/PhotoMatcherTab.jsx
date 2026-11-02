@@ -1,12 +1,16 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { useAuthStore } from '../../store/useAuthStore';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
+import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Badge from '../../components/common/Badge';
+import Modal from '../../components/common/Modal';
 import ResponsiveTable from '../../components/common/ResponsiveTable';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import StudentPhotoAvatar from './StudentPhotoAvatar';
 import {
   Camera,
   UploadCloud,
@@ -20,6 +24,8 @@ import {
   HelpCircle,
   RefreshCw,
   Users,
+  Search,
+  UserCheck,
 } from 'lucide-react';
 
 const CLASS_OPTIONS = [
@@ -35,6 +41,7 @@ const SECTION_OPTIONS = [
 export default function PhotoMatcherTab({ onNavigateToRoster }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef(null);
+  const token = useAuthStore((state) => state.token);
 
   // Mode and Option Selection
   // 'auto' = auto detect from filename; 'target' = specific class and section
@@ -47,10 +54,19 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [successBanner, setSuccessBanner] = useState('');
 
   // Results State
   const [batchData, setBatchData] = useState(null);
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, MATCHED, UNMATCHED, DUPLICATE
+
+  // Manual Assignment Modal State
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [selectedResult, setSelectedResult] = useState(null);
+  const [studentSearch, setStudentSearch] = useState('');
+  const [allStudents, setAllStudents] = useState([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
 
   // Drag and drop handlers
   const handleDragOver = (e) => {
@@ -135,8 +151,56 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
     setSelectedFile(null);
     setBatchData(null);
     setErrorMessage('');
+    setSuccessBanner('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  // Open the Manual Assignment Modal
+  const handleOpenAssignModal = async (result) => {
+    setSelectedResult(result);
+    setStudentSearch('');
+    setAssignModalOpen(true);
+    setLoadingStudents(true);
+
+    try {
+      const res = await api.get('/school/students', {
+        params: {
+          page: 0,
+          size: 200,
+        },
+      });
+      const items = res?.data?.content || res?.content || [];
+      setAllStudents(items);
+    } catch (err) {
+      setErrorMessage('Failed to load enrolled students list for manual assignment.');
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  // Execute Manual Assignment
+  const handleAssignStudent = async (student) => {
+    if (!selectedResult || !student) return;
+    setIsAssigning(true);
+
+    try {
+      const res = await api.post(
+        `/school/photos/results/${selectedResult.id}/assign/${student.id}`
+      );
+      const updatedBatch = res?.data || res;
+      setBatchData(updatedBatch);
+      queryClient.invalidateQueries({ queryKey: ['school-students'] });
+      setAssignModalOpen(false);
+      setSuccessBanner(
+        `Successfully linked photo "${selectedResult.fileName}" to student ${student.studentName} (${student.admissionNumber})!`
+      );
+      setTimeout(() => setSuccessBanner(''), 6000);
+    } catch (err) {
+      setErrorMessage(err.message || 'Failed to link photo to student.');
+    } finally {
+      setIsAssigning(false);
     }
   };
 
@@ -144,16 +208,51 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
   const allResults = batchData?.results || [];
   const filteredResults = allResults.filter((item) => {
     if (statusFilter === 'MATCHED') return item.matchStatus === 'MATCHED';
-    if (statusFilter === 'UNMATCHED') return item.matchStatus === 'NO_STUDENT_FOUND';
-    if (statusFilter === 'DUPLICATE') return item.matchStatus === 'DUPLICATE_MATCH';
+    if (statusFilter === 'UNMATCHED')
+      return item.matchStatus !== 'MATCHED' && !item.matchStatus?.includes('DUPLICATE');
+    if (statusFilter === 'DUPLICATE') return item.matchStatus?.includes('DUPLICATE');
     return true;
+  });
+
+  // Filter student list in modal
+  const filteredModalStudents = allStudents.filter((s) => {
+    if (!studentSearch.trim()) return true;
+    const q = studentSearch.toLowerCase();
+    const nameMatch = s.studentName?.toLowerCase().includes(q);
+    const admMatch = s.admissionNumber?.toLowerCase().includes(q);
+    const rollMatch = s.rollNumber?.toLowerCase().includes(q);
+    const classMatch = s.className?.toLowerCase().includes(q);
+    return nameMatch || admMatch || rollMatch || classMatch;
   });
 
   const matchColumns = [
     {
       key: 'fileName',
-      label: 'Photo Filename',
-      cellClassName: 'font-mono text-xs font-semibold text-slate-900',
+      label: 'Photo & Filename',
+      render: (val, r) => (
+        <div className="flex items-center gap-3">
+          {r.photoFileId ? (
+            <img
+              src={`/api/v1/files/${r.photoFileId}${token ? `?token=${encodeURIComponent(token)}` : ''}`}
+              alt={val}
+              className="w-10 h-10 rounded-md object-cover border border-slate-200 shadow-2xs shrink-0 bg-slate-100"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-md bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0">
+              <Camera className="w-4 h-4" />
+            </div>
+          )}
+          <div>
+            <div className="font-mono text-xs font-semibold text-slate-900">{val}</div>
+            {r.parsedRollNumber && (
+              <div className="text-[11px] text-slate-500">Roll/Seq: #{r.parsedRollNumber}</div>
+            )}
+          </div>
+        </div>
+      ),
     },
     {
       key: 'parsedIdentifiers',
@@ -176,17 +275,24 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
       render: (_, r) => {
         if (r.studentName) {
           return (
-            <div>
-              <div className="font-semibold text-slate-900 text-xs sm:text-sm">
-                {r.studentName}
-              </div>
-              <div className="text-[11px] font-mono text-indigo-700">
-                {r.admissionNumber || 'No Adm No'}
+            <div className="flex items-center gap-2.5">
+              <StudentPhotoAvatar
+                photoFileId={r.photoFileId}
+                name={r.studentName}
+                size="sm"
+              />
+              <div>
+                <div className="font-semibold text-slate-900 text-xs sm:text-sm">
+                  {r.studentName}
+                </div>
+                <div className="text-[11px] font-mono text-indigo-700">
+                  {r.admissionNumber || 'No Adm No'}
+                </div>
               </div>
             </div>
           );
         }
-        return <span className="text-xs text-slate-400 italic">No matching student</span>;
+        return <span className="text-xs text-slate-400 italic">Not assigned</span>;
       },
     },
     {
@@ -201,11 +307,15 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
         } else if (val === 'NO_STUDENT_FOUND') {
           variant = 'warning';
           label = 'No Student Found';
-        } else if (val === 'DUPLICATE_MATCH') {
+        } else if (val === 'AMBIGUOUS_MATCH') {
+          variant = 'warning';
+          label = 'Ambiguous Roll';
+        } else if (val === 'DUPLICATE_PHOTO' || val === 'DUPLICATE_MATCH') {
           variant = 'neutral';
-          label = 'Duplicate Match';
+          label = 'Duplicate';
         } else {
           variant = 'danger';
+          label = 'Invalid Image';
         }
         return (
           <Badge variant={variant} size="sm">
@@ -222,13 +332,26 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
           className={`text-xs ${
             r.matchStatus === 'MATCHED'
               ? 'text-emerald-700'
-              : r.matchStatus === 'NO_STUDENT_FOUND'
+              : r.matchStatus === 'NO_STUDENT_FOUND' || r.matchStatus === 'AMBIGUOUS_MATCH'
               ? 'text-amber-700'
               : 'text-slate-600'
           }`}
         >
           {val || '—'}
         </span>
+      ),
+    },
+    {
+      key: 'action',
+      label: 'Action',
+      render: (_, r) => (
+        <Button
+          size="xs"
+          variant={r.matchStatus === 'MATCHED' ? 'outline' : 'primary'}
+          onClick={() => handleOpenAssignModal(r)}
+        >
+          {r.matchStatus === 'MATCHED' ? 'Reassign' : 'Assign Student'}
+        </Button>
       ),
     },
   ];
@@ -242,15 +365,34 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
             <Camera className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-slate-900">Automatic Photo Matcher</h2>
+            <h2 className="text-base font-bold text-slate-900">Automatic Student Photo Matcher</h2>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              Upload a ZIP archive containing student portrait images (.jpg, .jpeg, or .png).
-              The system automatically parses roll numbers or admission numbers from the file names
-              and assigns each photo directly to the matching student profile.
+              Upload a ZIP archive of student photos (.jpg, .jpeg, or .png). The smart engine
+              automatically matches sequential photo sequences (e.g. <code>1.jpg</code> to{' '}
+              <code>50.jpg</code>), full admission numbers (e.g. <code>ADM-2026-001.jpg</code>), or
+              class-section codes (e.g. <code>10_A_01.jpg</code>). Any unmatched photo can be
+              linked to any student with one click!
             </p>
           </div>
         </div>
       </Card>
+
+      {/* Global Success Banner */}
+      {successBanner && (
+        <div className="p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+            <span className="font-medium">{successBanner}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessBanner('')}
+            className="text-emerald-500 hover:text-emerald-800 font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Global Error Banner */}
       {errorMessage && (
@@ -300,14 +442,19 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
                     Auto-detect from file names (Recommended)
                   </div>
                   <p className="text-[11px] text-slate-500 leading-relaxed">
-                    Photos include class and section or admission numbers in their name, e.g.:
-                    <code className="text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded mx-1">
-                      10_A_01.jpg
+                    Automatically matches sequential photo numbers (e.g.{' '}
+                    <code className="text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded font-mono">
+                      1.jpg ... 50.jpg
                     </code>
-                    or
-                    <code className="text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded mx-1">
+                    ), admission numbers (
+                    <code className="text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded font-mono">
                       ADM-2026-001.jpg
                     </code>
+                    ), or class formats (
+                    <code className="text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded font-mono">
+                      10_A_01.jpg
+                    </code>
+                    ).
                   </p>
                 </div>
               </label>
@@ -330,17 +477,19 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
                 />
                 <div className="space-y-1">
                   <div className="text-xs font-bold text-slate-900">
-                    Target specific Class and Section (Option A)
+                    Target specific Class and Section
                   </div>
                   <p className="text-[11px] text-slate-500 leading-relaxed">
-                    Photos in this ZIP belong to one specific cohort and are named by roll number only, e.g.:
-                    <code className="text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded mx-1">
+                    Photos in this ZIP belong strictly to one class section and are named by roll
+                    number only, e.g.{' '}
+                    <code className="text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded font-mono">
                       01.jpg
+                    </code>{' '}
+                    or{' '}
+                    <code className="text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded font-mono">
+                      25.jpg
                     </code>
-                    or
-                    <code className="text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded mx-1">
-                      12.png
-                    </code>
+                    .
                   </p>
                 </div>
               </label>
@@ -474,7 +623,7 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
                 Matched
               </span>
               <div className="text-2xl font-bold text-emerald-800 mt-0.5">
-                {batchData.matchedCount || 0}
+                {batchData.matchedFiles ?? batchData.matchedCount ?? 0}
               </div>
               <div className="text-[11px] text-emerald-600 mt-1 font-medium">
                 Assigned to students
@@ -486,10 +635,10 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
                 Unmatched
               </span>
               <div className="text-2xl font-bold text-amber-800 mt-0.5">
-                {batchData.unmatchedCount || 0}
+                {batchData.unmatchedFiles ?? batchData.unmatchedCount ?? 0}
               </div>
               <div className="text-[11px] text-amber-600 mt-1 font-medium">
-                No student record found
+                Manual assignment available
               </div>
             </Card>
 
@@ -498,7 +647,7 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
                 Duplicates / Others
               </span>
               <div className="text-2xl font-bold text-slate-800 mt-0.5">
-                {batchData.duplicateCount || 0}
+                {batchData.duplicateFiles ?? batchData.duplicateCount ?? 0}
               </div>
               <div className="text-[11px] text-slate-500 mt-1">
                 Multiple files per student
@@ -530,7 +679,7 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
                     : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
                 }`}
               >
-                Matched ({batchData.matchedCount || 0})
+                Matched ({batchData.matchedFiles ?? batchData.matchedCount ?? 0})
               </button>
               <button
                 type="button"
@@ -541,9 +690,9 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
                     : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
                 }`}
               >
-                Unmatched ({batchData.unmatchedCount || 0})
+                Unmatched ({batchData.unmatchedFiles ?? batchData.unmatchedCount ?? 0})
               </button>
-              {batchData.duplicateCount > 0 && (
+              {(batchData.duplicateFiles ?? batchData.duplicateCount ?? 0) > 0 && (
                 <button
                   type="button"
                   onClick={() => setStatusFilter('DUPLICATE')}
@@ -553,7 +702,7 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
-                  Duplicates ({batchData.duplicateCount || 0})
+                  Duplicates ({batchData.duplicateFiles ?? batchData.duplicateCount ?? 0})
                 </button>
               )}
             </div>
@@ -574,16 +723,142 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
           <ResponsiveTable
             columns={matchColumns}
             data={filteredResults}
-            keyField="fileName"
+            keyField="id"
             emptyTitle="No photos to display"
             emptyMessage={
               statusFilter === 'UNMATCHED'
-                ? 'All photos in this batch successfully matched with enrolled students!'
+                ? 'All photos in this batch are successfully assigned to enrolled students!'
                 : 'No photo records match the current filter.'
             }
           />
         </div>
       )}
+
+      {/* Manual Assignment Modal */}
+      <Modal
+        isOpen={assignModalOpen}
+        onClose={() => !isAssigning && setAssignModalOpen(false)}
+        title="Assign Photo to Enrolled Student"
+        maxWidth="max-w-2xl"
+      >
+        <div className="space-y-4">
+          {/* Target Photo Header Info */}
+          {selectedResult && (
+            <div className="flex items-center gap-4 p-3.5 bg-slate-50 border border-slate-200 rounded-lg">
+              {selectedResult.photoFileId ? (
+                <img
+                  src={`/api/v1/files/${selectedResult.photoFileId}${
+                    token ? `?token=${encodeURIComponent(token)}` : ''
+                  }`}
+                  alt={selectedResult.fileName}
+                  className="w-14 h-14 rounded-lg object-cover border border-slate-200 shadow-2xs shrink-0"
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-lg bg-slate-200 flex items-center justify-center text-slate-400 shrink-0">
+                  <Camera className="w-6 h-6" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="font-mono text-sm font-bold text-slate-900 truncate">
+                  {selectedResult.fileName}
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  Current Status:{' '}
+                  <span className="font-semibold text-slate-700">
+                    {selectedResult.matchStatus}
+                  </span>
+                </div>
+                {selectedResult.message && (
+                  <div className="text-xs text-amber-700 mt-0.5 truncate">
+                    {selectedResult.message}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Student Search Box */}
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search by student name, admission number, or roll number..."
+              value={studentSearch}
+              onChange={(e) => setStudentSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              autoFocus
+            />
+          </div>
+
+          {/* Students Roster List */}
+          <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-72 overflow-y-auto">
+            {loadingStudents ? (
+              <div className="p-8 text-center">
+                <LoadingSpinner size="md" />
+                <p className="text-xs text-slate-500 mt-2">Loading enrolled students...</p>
+              </div>
+            ) : filteredModalStudents.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500">
+                No students found matching "{studentSearch}".
+              </div>
+            ) : (
+              filteredModalStudents.map((s) => (
+                <div
+                  key={s.id}
+                  className="p-3 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <StudentPhotoAvatar
+                      photoFileId={s.photoFileId}
+                      name={s.studentName}
+                      size="sm"
+                    />
+                    <div className="min-w-0">
+                      <div className="font-semibold text-xs sm:text-sm text-slate-900 truncate">
+                        {s.studentName}
+                      </div>
+                      <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-2 mt-0.5 font-mono">
+                        <span className="text-indigo-700 font-bold">{s.admissionNumber}</span>
+                        <span>•</span>
+                        <span>
+                          Class {s.className}-{s.section}
+                        </span>
+                        {s.rollNumber && (
+                          <>
+                            <span>•</span>
+                            <span>Roll #{s.rollNumber}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    size="xs"
+                    loading={isAssigning}
+                    onClick={() => handleAssignStudent(s)}
+                  >
+                    <UserCheck className="h-3.5 w-3.5 mr-1" />
+                    Assign
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAssignModalOpen(false)}
+              disabled={isAssigning}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

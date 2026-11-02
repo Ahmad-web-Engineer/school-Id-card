@@ -59,4 +59,15 @@ public class SchoolPhotoImportController {
         StudentPhotoUploadResponse response = photoImportService.updateStudentPhoto(schoolId, studentId, file);
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
+
+    @PostMapping("/photos/results/{resultId}/assign/{studentId}")
+    @Operation(summary = "Manually link an unmatched or ambiguous photo to an enrolled student")
+    public ResponseEntity<ApiResponse<PhotoImportBatchResponse>> assignPhotoResult(
+            @PathVariable UUID resultId,
+            @PathVariable UUID studentId
+    ) {
+        UUID schoolId = SecurityUtils.getRequiredSchoolId();
+        PhotoImportBatchResponse response = photoImportService.assignPhotoResultToStudent(schoolId, resultId, studentId);
+        return ResponseEntity.ok(ApiResponse.ok(response));
+    }
 }

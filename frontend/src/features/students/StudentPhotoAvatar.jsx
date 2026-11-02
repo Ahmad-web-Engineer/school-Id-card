@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuthStore } from '../../store/useAuthStore';
 
 function getInitials(name = '') {
   if (!name || typeof name !== 'string') return '?';
@@ -22,15 +23,17 @@ export default function StudentPhotoAvatar({
   className = '',
   alt,
 }) {
+  const token = useAuthStore((state) => state.token);
   const [hasError, setHasError] = useState(false);
   const sizeClass = sizeClasses[size] || sizeClasses.md;
   const initials = getInitials(name);
 
   // If there's a valid photo ID and no error loading it yet
   if (photoFileId && !hasError) {
+    const photoUrl = `/api/v1/files/${photoFileId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
     return (
       <img
-        src={`/api/v1/files/${photoFileId}`}
+        src={photoUrl}
         alt={alt || `${name || 'Student'}'s portrait`}
         onError={() => setHasError(true)}
         className={`${sizeClass} rounded-full object-cover border border-slate-200 shadow-xs shrink-0 ${className}`}

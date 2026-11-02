@@ -566,6 +566,103 @@ class PhotoImportIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    @DisplayName("Bulk upload sequential numeric filenames (1.jpg, 2.jpg) matches students by admission number suffix")
+    void bulkUploadPhotos_matchesNumericAdmissionSuffix() throws Exception {
+        byte[] jpegBytes = createDummyImageBytes("jpg", Color.CYAN);
+
+        Map<String, byte[]> zipFiles = new LinkedHashMap<>();
+        // Filename 1.jpg -> matches Student 1 (ADM-P-001)
+        zipFiles.put("1.jpg", jpegBytes);
+        // Filename 2.jpg -> matches Student 2 (ADM-P-002)
+        zipFiles.put("2.jpg", jpegBytes);
+
+        byte[] zipArchive = createZipArchive(zipFiles);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "numeric_photos.zip",
+                "application/zip",
+                zipArchive
+        );
+
+        MvcResult result = mockMvc.perform(multipart("/api/v1/school/photos/bulk-upload")
+                        .file(file)
+                        .header("Authorization", "Bearer " + school1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success", is(true)))
+                .andExpect(jsonPath("$.data.totalFiles", is(2)))
+                .andExpect(jsonPath("$.data.matchedCount", is(2)))
+                .andExpect(jsonPath("$.data.unmatchedCount", is(0)))
+                .andExpect(jsonPath("$.data.duplicateCount", is(0)))
+                .andReturn();
+
+        JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString()).path("data");
+        JsonNode r1 = findResultByFileName(json.path("results"), "1.jpg");
+        assertThat(r1).isNotNull();
+        assertThat(r1.path("matchStatus").asText()).isEqualTo("MATCHED");
+        assertThat(r1.path("studentId").asText()).isEqualTo(student1Id.toString());
+
+        JsonNode r2 = findResultByFileName(json.path("results"), "2.jpg");
+        assertThat(r2).isNotNull();
+        assertThat(r2.path("matchStatus").asText()).isEqualTo("MATCHED");
+        assertThat(r2.path("studentId").asText()).isEqualTo(student2Id.toString());
+    }
+
+    @Test
+    @DisplayName("Manually assign an unmatched photo to an enrolled student")
+    void assignPhotoResult_manuallyAssignsToStudent() throws Exception {
+        byte[] jpegBytes = createDummyImageBytes("jpg", Color.MAGENTA);
+
+        Map<String, byte[]> zipFiles = new LinkedHashMap<>();
+        zipFiles.put("unmatched_portrait.jpg", jpegBytes);
+
+        byte[] zipArchive = createZipArchive(zipFiles);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "unmatched.zip",
+                "application/zip",
+                zipArchive
+        );
+
+        MvcResult uploadResult = mockMvc.perform(multipart("/api/v1/school/photos/bulk-upload")
+                        .file(file)
+                        .header("Authorization", "Bearer " + school1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.unmatchedCount", is(1)))
+                .andReturn();
+
+        JsonNode json = objectMapper.readTree(uploadResult.getResponse().getContentAsString()).path("data");
+        JsonNode unassigned = json.path("results").get(0);
+        UUID resultId = UUID.fromString(unassigned.path("id").asText());
+        UUID photoFileId = UUID.fromString(unassigned.path("photoFileId").asText());
+        assertThat(unassigned.path("matchStatus").asText()).isEqualTo("NO_STUDENT_FOUND");
+        assertThat(photoFileId).isNotNull();
+
+        // Now call assign endpoint to link to Student 4
+        MvcResult assignResult = mockMvc.perform(MockMvcRequestBuilders.post("/api/v1/school/photos/results/" + resultId + "/assign/" + student4Id)
+                        .header("Authorization", "Bearer " + school1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success", is(true)))
+                .andExpect(jsonPath("$.data.matchedCount", is(1)))
+                .andExpect(jsonPath("$.data.unmatchedCount", is(0)))
+                .andReturn();
+
+        JsonNode assignJson = objectMapper.readTree(assignResult.getResponse().getContentAsString()).path("data");
+        JsonNode assignedItem = assignJson.path("results").get(0);
+        assertThat(assignedItem.path("matchStatus").asText()).isEqualTo("MATCHED");
+        assertThat(assignedItem.path("studentId").asText()).isEqualTo(student4Id.toString());
+        assertThat(assignedItem.path("studentName").asText()).isEqualTo("Vikram Singh");
+
+        // Verify student record updated in DB
+        Student updatedStudent = studentRepository.findById(student4Id).orElseThrow();
+        assertThat(updatedStudent.getPhotoFileId()).isEqualTo(photoFileId);
+
+        // Security check: School 2 cannot assign School 1's photo result
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/v1/school/photos/results/" + resultId + "/assign/" + student4Id)
+                        .header("Authorization", "Bearer " + school2Token))
+                .andExpect(status().isForbidden());
+    }
+
     private byte[] createDummyImageBytes(String format, Color color) throws IOException {
         BufferedImage image = new BufferedImage(10, 10, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = image.createGraphics();

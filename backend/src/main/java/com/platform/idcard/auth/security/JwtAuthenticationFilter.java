@@ -31,11 +31,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
         String authHeader = request.getHeader("Authorization");
+        String jwt = null;
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String jwt = authHeader.substring(7).trim();
+            jwt = authHeader.substring(7).trim();
+        } else {
+            String tokenParam = request.getParameter("token");
+            if (tokenParam != null && !tokenParam.isBlank()) {
+                jwt = tokenParam.trim();
+            }
+        }
 
-            if (jwtService.validateToken(jwt) && SecurityContextHolder.getContext().getAuthentication() == null) {
+        if (jwt != null && jwtService.validateToken(jwt) && SecurityContextHolder.getContext().getAuthentication() == null) {
                 try {
                     Claims claims = jwtService.extractAllClaims(jwt);
                     String email = claims.getSubject();
@@ -73,7 +80,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     // Invalid claims or parsing failure: context remains unauthenticated
                 }
             }
-        }
 
         filterChain.doFilter(request, response);
     }

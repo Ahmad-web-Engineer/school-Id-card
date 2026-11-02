@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,6 +20,10 @@ public interface StudentRepository extends JpaRepository<Student, UUID> {
     boolean existsBySchoolIdAndAdmissionNumberAndIdNot(UUID schoolId, String admissionNumber, UUID id);
 
     Optional<Student> findByIdAndSchoolId(UUID id, UUID schoolId);
+
+    List<Student> findBySchoolId(UUID schoolId);
+
+    List<Student> findBySchoolIdOrderByAdmissionNumberAsc(UUID schoolId);
 
     long countBySchoolId(UUID schoolId);
 

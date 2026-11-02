@@ -31,6 +31,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -99,6 +100,9 @@ public class PhotoImportService {
         batch.setImportStatus("PROCESSING");
         batch = batchRepository.save(batch);
 
+        List<Student> allSchoolStudents = studentRepository.findBySchoolIdOrderByAdmissionNumberAsc(schoolId);
+        String dominantPrefix = determineDominantAdmissionPrefix(allSchoolStudents);
+
         List<PhotoImportResult> results = new ArrayList<>();
         Set<UUID> matchedStudentIdsInBatch = new HashSet<>();
         int matchedCount = 0;
@@ -157,11 +161,27 @@ public class PhotoImportService {
                     continue;
                 }
 
+                // Always store the extracted photo image file so it can be assigned manually if needed
+                String mimeType = "image/" + ("png".equals(extension) ? "png" : "jpeg");
+                FileEntity storedImage = fileStorageService.storeFile(
+                        new ByteArrayInputStream(imageBytes),
+                        simpleName,
+                        mimeType,
+                        imageBytes.length,
+                        schoolId,
+                        currentUserId
+                );
+
                 // Parse filename
                 ParsedFilename parsed = parseFileName(simpleName, selectedClass, selectedSection);
 
-                // Match against student
-                Student matchedStudent = findStudentForPhoto(schoolId, parsed);
+                // Perform multi-strategy matching against enrolled students
+                MatchOutcome outcome = matchStudentForPhoto(
+                        parsed,
+                        allSchoolStudents,
+                        matchedStudentIdsInBatch,
+                        dominantPrefix
+                );
 
                 PhotoImportResult result = new PhotoImportResult();
                 result.setBatch(batch);
@@ -169,40 +189,23 @@ public class PhotoImportService {
                 result.setParsedClass(parsed.className());
                 result.setParsedSection(parsed.section());
                 result.setParsedRollNumber(parsed.rollNumber());
+                result.setPhotoFile(storedImage);
+                result.setMatchStatus(outcome.status());
+                result.setMessage(outcome.message());
 
-                if (matchedStudent == null) {
-                    result.setMatchStatus("NO_STUDENT_FOUND");
-                    String desc = buildNoMatchMessage(parsed);
-                    result.setMessage(desc);
-                    unmatchedCount++;
-                } else if (matchedStudentIdsInBatch.contains(matchedStudent.getId())) {
-                    result.setMatchedStudent(matchedStudent);
-                    result.setMatchStatus("DUPLICATE_PHOTO");
-                    result.setMessage("Duplicate photo in archive for student: " + matchedStudent.getStudentName() +
-                            " (" + matchedStudent.getAdmissionNumber() + ")");
-                    duplicateCount++;
-                } else {
-                    // Store photo image file
-                    String mimeType = "image/" + ("png".equals(extension) ? "png" : "jpeg");
-                    FileEntity storedImage = fileStorageService.storeFile(
-                            new ByteArrayInputStream(imageBytes),
-                            simpleName,
-                            mimeType,
-                            imageBytes.length,
-                            schoolId,
-                            currentUserId
-                    );
-
-                    // Update student
+                if ("MATCHED".equals(outcome.status())) {
+                    Student matchedStudent = outcome.student();
                     matchedStudent.setPhotoFileId(storedImage.getId());
                     studentRepository.save(matchedStudent);
 
                     matchedStudentIdsInBatch.add(matchedStudent.getId());
                     result.setMatchedStudent(matchedStudent);
-                    result.setPhotoFile(storedImage);
-                    result.setMatchStatus("MATCHED");
-                    result.setMessage(buildMatchedMessage(parsed, matchedStudent));
                     matchedCount++;
+                } else if ("DUPLICATE_PHOTO".equals(outcome.status())) {
+                    result.setMatchedStudent(outcome.student());
+                    duplicateCount++;
+                } else {
+                    unmatchedCount++;
                 }
 
                 results.add(result);
@@ -248,6 +251,56 @@ public class PhotoImportService {
                 batch.getImportStatus(),
                 resultDtos
         );
+    }
+
+    @Transactional
+    public PhotoImportBatchResponse assignPhotoResultToStudent(UUID schoolId, UUID resultId, UUID studentId) {
+        PhotoImportResult result = resultRepository.findById(resultId)
+                .orElseThrow(() -> new ResourceNotFoundException("Photo import result not found"));
+
+        PhotoImportBatch batch = result.getBatch();
+        if (!batch.getSchool().getId().equals(schoolId)) {
+            throw new ApiException(
+                    ErrorCode.ACCESS_DENIED,
+                    "You do not have permission to modify this photo batch.",
+                    HttpStatus.FORBIDDEN
+            );
+        }
+
+        Student student = studentRepository.findByIdAndSchoolId(studentId, schoolId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found in this school"));
+
+        if (result.getPhotoFile() == null) {
+            throw new ApiException(
+                    ErrorCode.RESOURCE_NOT_FOUND,
+                    "No photo file is associated with this result.",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+
+        // Link photo file to student record
+        student.setPhotoFileId(result.getPhotoFile().getId());
+        studentRepository.save(student);
+
+        // Update result
+        String previousStatus = result.getMatchStatus();
+        result.setMatchedStudent(student);
+        result.setMatchStatus("MATCHED");
+        result.setMessage("Manually assigned to " + student.getStudentName() + " (" + student.getAdmissionNumber() + ")");
+        resultRepository.save(result);
+
+        // Adjust batch counters if moving from unmatched or duplicate to matched
+        if (!"MATCHED".equals(previousStatus)) {
+            batch.setMatchedFiles(batch.getMatchedFiles() + 1);
+            if ("DUPLICATE_PHOTO".equals(previousStatus)) {
+                batch.setDuplicateFiles(Math.max(0, batch.getDuplicateFiles() - 1));
+            } else {
+                batch.setUnmatchedFiles(Math.max(0, batch.getUnmatchedFiles() - 1));
+            }
+            batchRepository.save(batch);
+        }
+
+        return getPhotoBatchReport(schoolId, batch.getId());
     }
 
     @Transactional(readOnly = true)
@@ -307,36 +360,167 @@ public class PhotoImportService {
         );
     }
 
-    private Student findStudentForPhoto(UUID schoolId, ParsedFilename parsed) {
-        // Priority 1: Match by class + section + rollNumber
+    private MatchOutcome matchStudentForPhoto(
+            ParsedFilename parsed,
+            List<Student> allStudents,
+            Set<UUID> matchedStudentIds,
+            String dominantPrefix
+    ) {
+        // Strategy 1: Explicit or parsed Class + Section + Roll Number
         if (parsed.className() != null && parsed.section() != null && parsed.rollNumber() != null) {
-            Optional<Student> match = studentRepository.findBySchoolIdAndClassNameIgnoreCaseAndSectionIgnoreCaseAndRollNumber(
-                    schoolId, parsed.className(), parsed.section(), parsed.rollNumber()
-            );
-            if (match.isPresent()) {
-                return match.get();
+            String normReqClass = normalizeClassName(parsed.className());
+            String normReqRoll = normalizeRoll(parsed.rollNumber());
+
+            for (Student s : allStudents) {
+                if (normalizeClassName(s.getClassName()).equalsIgnoreCase(normReqClass)
+                        && s.getSection() != null && s.getSection().trim().equalsIgnoreCase(parsed.section().trim())
+                        && normalizeRoll(s.getRollNumber()).equals(normReqRoll)) {
+                    if (matchedStudentIds.contains(s.getId())) {
+                        return new MatchOutcome(
+                                "DUPLICATE_PHOTO",
+                                s,
+                                "Duplicate photo in archive for student: " + s.getStudentName() + " (" + s.getAdmissionNumber() + ")"
+                        );
+                    }
+                    return new MatchOutcome(
+                            "MATCHED",
+                            s,
+                            "Matched by Class " + s.getClassName() + "-" + s.getSection() + " roll number " + s.getRollNumber()
+                    );
+                }
+            }
+            // If class-sec-roll did not match, fall through to Strategy 2
+            // because admission numbers like "ADM-P-001" also split into 3 parts.
+        }
+
+        // Strategy 2: Full Admission Number Match (Exact or Alphanumeric)
+        if (parsed.admissionCandidate() != null && !parsed.admissionCandidate().isBlank()) {
+            String candidate = parsed.admissionCandidate().trim();
+            for (Student s : allStudents) {
+                if (s.getAdmissionNumber().equalsIgnoreCase(candidate)) {
+                    if (matchedStudentIds.contains(s.getId())) {
+                        return new MatchOutcome(
+                                "DUPLICATE_PHOTO",
+                                s,
+                                "Duplicate photo in archive for student: " + s.getStudentName() + " (" + s.getAdmissionNumber() + ")"
+                        );
+                    }
+                    return new MatchOutcome(
+                            "MATCHED",
+                            s,
+                            "Matched by admission number " + s.getAdmissionNumber()
+                    );
+                }
+            }
+
+            // Alphanumeric clean match (e.g. ADM2026001 vs ADM-2026-001)
+            String cleanCandidate = candidate.replaceAll("[^a-zA-Z0-9]", "");
+            if (cleanCandidate.length() >= 3) {
+                for (Student s : allStudents) {
+                    String cleanAdm = s.getAdmissionNumber().replaceAll("[^a-zA-Z0-9]", "");
+                    if (cleanAdm.equalsIgnoreCase(cleanCandidate)) {
+                        if (matchedStudentIds.contains(s.getId())) {
+                            return new MatchOutcome(
+                                    "DUPLICATE_PHOTO",
+                                    s,
+                                    "Duplicate photo in archive for student: " + s.getStudentName() + " (" + s.getAdmissionNumber() + ")"
+                            );
+                        }
+                        return new MatchOutcome(
+                                "MATCHED",
+                                s,
+                                "Matched by admission number " + s.getAdmissionNumber()
+                        );
+                    }
+                }
             }
         }
 
-        // Priority 2: Match by admission number
-        if (parsed.admissionCandidate() != null) {
-            Optional<Student> matchAdm = studentRepository.findBySchoolIdAndAdmissionNumberIgnoreCase(
-                    schoolId, parsed.admissionCandidate()
-            );
-            if (matchAdm.isPresent()) {
-                return matchAdm.get();
+        // Strategy 3: Numeric photo sequence / trailing numeric suffix of admission number
+        // (e.g. 1.jpg -> ADM-2026-001, 50.jpg -> ADM-2026-050)
+        Integer num = tryParseInt(parsed.rollNumber());
+        if (num == null) {
+            num = tryParseInt(parsed.admissionCandidate());
+        }
+
+        if (num != null) {
+            final int targetNum = num;
+            List<Student> suffixMatches = allStudents.stream()
+                    .filter(s -> {
+                        Integer sInt = extractTrailingInteger(s.getAdmissionNumber());
+                        return sInt != null && sInt == targetNum;
+                    })
+                    .toList();
+
+            if (!suffixMatches.isEmpty()) {
+                Student chosen;
+                if (suffixMatches.size() == 1) {
+                    chosen = suffixMatches.get(0);
+                } else {
+                    // Prefer candidate not yet matched in this batch
+                    List<Student> unMatched = suffixMatches.stream()
+                            .filter(s -> !matchedStudentIds.contains(s.getId()))
+                            .toList();
+                    List<Student> pool = unMatched.isEmpty() ? suffixMatches : unMatched;
+
+                    // Prefer candidate matching dominant admission prefix (e.g. ADM-2026- over GW-2026-)
+                    chosen = pool.stream()
+                            .filter(s -> extractPrefix(s.getAdmissionNumber()).equalsIgnoreCase(dominantPrefix))
+                            .findFirst()
+                            .orElse(pool.get(0));
+                }
+
+                if (matchedStudentIds.contains(chosen.getId())) {
+                    return new MatchOutcome(
+                            "DUPLICATE_PHOTO",
+                            chosen,
+                            "Duplicate photo in archive for student: " + chosen.getStudentName() + " (" + chosen.getAdmissionNumber() + ")"
+                    );
+                }
+
+                return new MatchOutcome(
+                        "MATCHED",
+                        chosen,
+                        "Matched by admission number " + chosen.getAdmissionNumber() + " (suffix #" + num + ")"
+                );
+            }
+
+            // Strategy 4: Unique Roll Number Across School
+            List<Student> rollMatches = allStudents.stream()
+                    .filter(s -> normalizeRoll(s.getRollNumber()).equals(String.valueOf(targetNum)))
+                    .toList();
+
+            if (rollMatches.size() == 1) {
+                Student s = rollMatches.get(0);
+                if (matchedStudentIds.contains(s.getId())) {
+                    return new MatchOutcome(
+                            "DUPLICATE_PHOTO",
+                            s,
+                            "Duplicate photo in archive for student: " + s.getStudentName() + " (" + s.getAdmissionNumber() + ")"
+                    );
+                }
+                return new MatchOutcome(
+                        "MATCHED",
+                        s,
+                        "Matched by roll number " + s.getRollNumber() + " (Class " + s.getClassName() + "-" + s.getSection() + ")"
+                );
+            } else if (rollMatches.size() > 1) {
+                String studentList = rollMatches.stream()
+                        .map(s -> s.getStudentName() + " (" + s.getClassName() + "-" + s.getSection() + ")")
+                        .collect(Collectors.joining(", "));
+                return new MatchOutcome(
+                        "AMBIGUOUS_MATCH",
+                        null,
+                        "Roll #" + targetNum + " matches multiple students: " + studentList + ". Use Target Class & Section or Assign manually."
+                );
             }
         }
 
-        // Priority 3: If roll number was parsed and there's a unique match by roll number in school (only if roll is provided)
-        if (parsed.className() == null && parsed.section() == null && parsed.rollNumber() != null) {
-            List<Student> students = studentRepository.findBySchoolIdAndRollNumber(schoolId, parsed.rollNumber());
-            if (students.size() == 1) {
-                return students.get(0);
-            }
-        }
-
-        return null;
+        return new MatchOutcome(
+                "NO_STUDENT_FOUND",
+                null,
+                "No student found matching filename " + parsed.admissionCandidate()
+        );
     }
 
     private ParsedFilename parseFileName(String fileName, String requestClass, String requestSection) {
@@ -373,18 +557,60 @@ public class PhotoImportService {
         );
     }
 
-    private String buildMatchedMessage(ParsedFilename parsed, Student student) {
-        if (parsed.className() != null && parsed.section() != null && parsed.rollNumber() != null) {
-            return "Matched by class " + parsed.className() + "-" + parsed.section() + " roll number " + parsed.rollNumber();
+    private Integer tryParseInt(String text) {
+        if (text == null || text.isBlank()) return null;
+        try {
+            return Integer.parseInt(text.trim());
+        } catch (NumberFormatException e) {
+            return null;
         }
-        return "Matched by admission number " + student.getAdmissionNumber();
     }
 
-    private String buildNoMatchMessage(ParsedFilename parsed) {
-        if (parsed.className() != null && parsed.section() != null && parsed.rollNumber() != null) {
-            return "No student found with roll number " + parsed.rollNumber() + " in Class " + parsed.className() + "-" + parsed.section();
+    private Integer extractTrailingInteger(String text) {
+        if (text == null || text.isBlank()) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(".*?(\\d+)$").matcher(text.trim());
+        if (m.matches()) {
+            try {
+                return Integer.parseInt(m.group(1));
+            } catch (NumberFormatException ignored) {}
         }
-        return "No student found matching filename " + parsed.admissionCandidate();
+        return null;
+    }
+
+    private String extractPrefix(String admissionNumber) {
+        if (admissionNumber == null) return "";
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(.*?)(?:\\d+)$").matcher(admissionNumber.trim());
+        if (m.matches()) {
+            return m.group(1).toUpperCase();
+        }
+        return admissionNumber.toUpperCase();
+    }
+
+    private String determineDominantAdmissionPrefix(List<Student> students) {
+        if (students == null || students.isEmpty()) return "";
+        Map<String, Long> prefixCounts = students.stream()
+                .map(s -> extractPrefix(s.getAdmissionNumber()))
+                .filter(p -> !p.isBlank())
+                .collect(Collectors.groupingBy(p -> p, Collectors.counting()));
+
+        return prefixCounts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("");
+    }
+
+    private String normalizeClassName(String className) {
+        if (className == null) return "";
+        String s = className.trim().toLowerCase();
+        s = s.replaceAll("^(class|grade|std|standard)\\s*", "");
+        s = s.replaceAll("(?<=\\d)(st|nd|rd|th)\\b", "");
+        return s.trim();
+    }
+
+    private String normalizeRoll(String roll) {
+        if (roll == null) return "";
+        String stripped = roll.trim().replaceFirst("^0+(?!$)", "");
+        return stripped.isEmpty() ? roll.trim() : stripped;
     }
 
     private String stripLeadingZeros(String s) {
@@ -422,5 +648,11 @@ public class PhotoImportService {
             String section,
             String rollNumber,
             String admissionCandidate
+    ) {}
+
+    private record MatchOutcome(
+            String status,
+            Student student,
+            String message
     ) {}
 }
