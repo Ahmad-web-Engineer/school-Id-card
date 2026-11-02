@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -27,14 +27,28 @@ import {
 
 export default function OrdersPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(0);
   const [size] = useState(10);
   const [statusFilter, setStatusFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(location.pathname === '/school/new-order');
   const [actionError, setActionError] = useState(null);
+
+  useEffect(() => {
+    if (location.pathname === '/school/new-order') {
+      setIsWizardOpen(true);
+    }
+  }, [location.pathname]);
+
+  const handleCloseWizard = () => {
+    setIsWizardOpen(false);
+    if (location.pathname === '/school/new-order') {
+      navigate('/school/orders', { replace: true });
+    }
+  };
 
   // Fetch orders
   const {
@@ -342,7 +356,7 @@ export default function OrdersPage() {
       {/* New Order Wizard Modal */}
       <NewOrderWizardModal
         isOpen={isWizardOpen}
-        onClose={() => setIsWizardOpen(false)}
+        onClose={handleCloseWizard}
         onSuccess={(created) => {
           navigate(`/school/orders/${created.id}`);
         }}

@@ -215,6 +215,9 @@ export default function CardCanvas({
                         src={activeStudentData.photo_url || activeStudentData.photoUrl}
                         alt="Student"
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
                       />
                     ) : (
                       <div className="flex flex-col items-center justify-center p-1 text-slate-400">
@@ -230,6 +233,9 @@ export default function CardCanvas({
                         src={activeStudentData.school_logo_url || activeStudentData.logoUrl}
                         alt="School Logo"
                         className="w-full h-full object-contain p-0.5"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
                       />
                     ) : (
                       <div className="flex flex-col items-center justify-center p-0.5 text-indigo-700 bg-indigo-50 w-full h-full">
@@ -340,11 +346,14 @@ export default function CardCanvas({
                       src={activeStudentData.signature_url || activeStudentData.signatureUrl}
                       alt="Signature"
                       className="max-h-[60%] max-w-[90%] object-contain mb-0.5"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
                     />
                   ) : null}
                   <div className="w-4/5 border-t border-slate-400 mb-0.5" />
                   <span className="text-[6.5px] font-medium text-slate-500 uppercase tracking-wider text-center leading-none">
-                    {el.label || 'Principal Signature'}
+                    {activeStudentData?.principal_name || el.label || 'Principal Signature'}
                   </span>
                 </div>
               )}

@@ -1048,6 +1048,36 @@
 
 ---
 
+## Post-Step Enhancement: School Profile Card Preview & New Order Wizard Fixes
+
+### What Was Built & Fixed
+1. **School Profile Card Preview & Asset Loading (`SchoolProfilePage.jsx` & `CardCanvas.jsx`):**
+   - **Authenticated File Loading:** Added `?token=${encodeURIComponent(token)}` to all logo and signature image requests, ensuring browser `<img>` requests authenticate against `FileController` and `JwtAuthenticationFilter` without 401 Unauthorized errors.
+   - **Institutional Identity Preview (`PROFILE_PREVIEW_ELEMENTS`):** Designed a dedicated 7-field institutional preview template for `<CardCanvas />` that immediately renders the School Name (`{{school_name}}`), Motto / Tagline (`{{school_tagline}}`), Board Affiliation (`Affiliation: {{affiliation_number}}`), Official Website (`{{school_website}}`), Authorized Signatory (`{{principal_name}}`), School Logo, and Signature image as the user types or saves.
+   - **Graceful Error Handling:** Handled `onError` events for logo and signature image assets to cleanly fall back to placeholders and prevent broken image icons.
+
+2. **New Order Wizard Modal (`NewOrderWizardModal.jsx`):**
+   - **Template Name & Orientation Display (Step 1):** Corrected template title accessor to `{tpl.templateName || tpl.name}` and orientation calculation to dynamic aspect-ratio fallback (`tpl.orientation || (tpl.cardWidthMm > tpl.cardHeightMm ? 'Landscape' : 'Portrait')`), resolving blank template title cards.
+   - **Student Roster Array Extraction (Step 2):** Safely extracted student data array (`Array.isArray(studentsRes?.data) ? studentsRes.data : studentsRes?.data?.content || []`) to match `PagedResponse` structure where `data` is the array directly.
+   - **Student Field Mappings:** Corrected row and filter accessors to use `s.studentName || s.fullName`, `s.className || s.standard`, and `s.photoFileId || s.hasPhoto`, displaying all 53 enrolled students with proper class/section, roll number, and "Photo Ready" status tags.
+   - **Summary (Step 4):** Updated Order Summary template label to `{selectedTemplate?.templateName || selectedTemplate?.name}`.
+
+3. **Order Route Handling (`OrdersPage.jsx`):**
+   - Added automatic detection of `/school/new-order` route to immediately open `NewOrderWizardModal`, and navigate back to `/school/orders` on modal close.
+
+### How It Was Verified
+- **Backend Test Suite:** Executed `mvn test` — **169/169 automated tests passed** (0 failures, 0 errors, 0 skipped).
+- **Frontend Production Build:** Executed `npm run build` — `vite build` completed cleanly with 0 errors.
+- **End-to-End Live API & Image Loading Verification:**
+  - Authenticated as `school@greenwood.edu`.
+  - Verified `GET /api/v1/school/profile` returns School Name ("Greenwood International School"), Affiliation ("CBSE/AFF/19842"), Website ("https://greenwood.edu.in"), Tagline ("Excellence in Knowledge & Character"), and Principal ("Dr. Rajesh Verma").
+  - Verified `GET /api/v1/files/{logoFileId}?token=...` returns HTTP 200 (83,094 bytes).
+  - Verified `GET /api/v1/files/{signatureFileId}?token=...` returns HTTP 200 (678,513 bytes).
+  - Verified `GET /api/v1/school/templates` returns assigned templates with template names and millimeter dimensions.
+  - Verified `GET /api/v1/school/students?page=0&size=500` returns all 53 students with photo status.
+
+---
+
 ## Questions & Blockers
 *None. All requirements successfully satisfied.*
 

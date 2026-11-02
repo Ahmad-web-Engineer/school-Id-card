@@ -8,7 +8,7 @@ import Input from '../../components/common/Input';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorState from '../../components/common/ErrorState';
 import CardCanvas from '../../features/templates/CardCanvas';
-import { DEFAULT_FRONT_DESIGN } from '../../features/templates/templatesConstants';
+import { useAuthStore } from '../../store/useAuthStore';
 import {
   School,
   Building,
@@ -27,8 +27,218 @@ import {
   Save,
 } from 'lucide-react';
 
+const PROFILE_PREVIEW_ELEMENTS = [
+  {
+    id: 'el-header-bar',
+    type: 'rect',
+    x: 0,
+    y: 0,
+    width: 85.6,
+    height: 14.5,
+    backgroundColor: '#1e3a8a',
+    borderColor: '#1e3a8a',
+    borderWidth: 0,
+    borderRadius: 0,
+  },
+  {
+    id: 'el-school-logo',
+    type: 'image',
+    field: 'school_logo',
+    x: 2.5,
+    y: 1.5,
+    width: 11.5,
+    height: 11.5,
+    label: 'School Logo',
+  },
+  {
+    id: 'el-school-title',
+    type: 'text',
+    field: 'school_name',
+    content: '{{school_name}}',
+    x: 15.5,
+    y: 1.2,
+    width: 68,
+    height: 4.8,
+    fontFamily: 'Inter, sans-serif',
+    fontSize: 9.5,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    textAlign: 'left',
+  },
+  {
+    id: 'el-school-tagline',
+    type: 'text',
+    content: '{{school_tagline}}',
+    x: 15.5,
+    y: 6.0,
+    width: 68,
+    height: 3.2,
+    fontFamily: 'Inter, sans-serif',
+    fontSize: 5.5,
+    fontWeight: 'medium',
+    color: '#bfdbfe',
+    textAlign: 'left',
+  },
+  {
+    id: 'el-school-affiliation',
+    type: 'text',
+    content: 'Affiliation: {{affiliation_number}}',
+    x: 15.5,
+    y: 9.6,
+    width: 68,
+    height: 3.2,
+    fontFamily: 'Inter, sans-serif',
+    fontSize: 5.0,
+    fontWeight: 'normal',
+    color: '#e0e7ff',
+    textAlign: 'left',
+  },
+  {
+    id: 'el-photo-box',
+    type: 'image',
+    field: 'student_photo',
+    x: 5,
+    y: 16.5,
+    width: 22,
+    height: 27,
+    borderColor: '#cbd5e1',
+    borderWidth: 1,
+    borderRadius: 2,
+    label: 'Student Photo',
+  },
+  {
+    id: 'el-student-name',
+    type: 'text',
+    field: 'student_name',
+    content: '{{student_name}}',
+    x: 30,
+    y: 16.5,
+    width: 50,
+    height: 5,
+    fontFamily: 'Inter, sans-serif',
+    fontSize: 10.5,
+    fontWeight: 'bold',
+    color: '#0f172a',
+    textAlign: 'left',
+  },
+  {
+    id: 'el-adm-number',
+    type: 'text',
+    content: 'Adm No: {{admission_number}}',
+    x: 30,
+    y: 22.0,
+    width: 32,
+    height: 3.8,
+    fontFamily: 'Inter, sans-serif',
+    fontSize: 7.0,
+    fontWeight: 'normal',
+    color: '#334155',
+    textAlign: 'left',
+  },
+  {
+    id: 'el-class-sec',
+    type: 'text',
+    content: 'Class: {{class}} - {{section}}',
+    x: 30,
+    y: 26.2,
+    width: 32,
+    height: 3.8,
+    fontFamily: 'Inter, sans-serif',
+    fontSize: 7.0,
+    fontWeight: 'normal',
+    color: '#334155',
+    textAlign: 'left',
+  },
+  {
+    id: 'el-blood-group',
+    type: 'text',
+    content: 'Blood Grp: {{blood_group}}',
+    x: 30,
+    y: 30.4,
+    width: 32,
+    height: 3.8,
+    fontFamily: 'Inter, sans-serif',
+    fontSize: 7.0,
+    fontWeight: 'semibold',
+    color: '#dc2626',
+    textAlign: 'left',
+  },
+  {
+    id: 'el-dob',
+    type: 'text',
+    content: 'DOB: {{date_of_birth}}',
+    x: 30,
+    y: 34.6,
+    width: 32,
+    height: 3.8,
+    fontFamily: 'Inter, sans-serif',
+    fontSize: 7.0,
+    fontWeight: 'normal',
+    color: '#334155',
+    textAlign: 'left',
+  },
+  {
+    id: 'el-parent-phone',
+    type: 'text',
+    content: 'Emergency: {{emergency_contact}}',
+    x: 5,
+    y: 44.5,
+    width: 50,
+    height: 4,
+    fontFamily: 'Inter, sans-serif',
+    fontSize: 6.8,
+    fontWeight: 'medium',
+    color: '#0f172a',
+    textAlign: 'left',
+  },
+  {
+    id: 'el-signature-box',
+    type: 'signature',
+    label: 'Authorized Signatory',
+    x: 57,
+    y: 35.5,
+    width: 25,
+    height: 13,
+    borderColor: '#94a3b8',
+    borderWidth: 1,
+    borderRadius: 1,
+  },
+  {
+    id: 'el-footer-bar',
+    type: 'rect',
+    x: 0,
+    y: 49.5,
+    width: 85.6,
+    height: 4.5,
+    backgroundColor: '#1e3a8a',
+    borderColor: '#1e3a8a',
+    borderWidth: 0,
+    borderRadius: 0,
+  },
+  {
+    id: 'el-footer-website',
+    type: 'text',
+    content: '{{school_website}}',
+    x: 2,
+    y: 50.2,
+    width: 81.6,
+    height: 3.2,
+    fontFamily: 'Inter, sans-serif',
+    fontSize: 5.5,
+    fontWeight: 'medium',
+    color: '#ffffff',
+    textAlign: 'center',
+  },
+];
+
 export default function SchoolProfilePage() {
   const queryClient = useQueryClient();
+  const token = useAuthStore((state) => state.token);
+
+  const getAuthFileUrl = (fileId) => {
+    if (!fileId) return '';
+    return `/api/v1/files/${fileId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  };
 
   const { data: profileData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['school-own-profile'],
@@ -79,13 +289,17 @@ export default function SchoolProfilePage() {
       });
 
       if (school.logoFileId) {
-        setLogoPreviewUrl(`/api/v1/files/${school.logoFileId}`);
+        setLogoPreviewUrl(getAuthFileUrl(school.logoFileId));
+      } else {
+        setLogoPreviewUrl('');
       }
       if (school.signatureFileId) {
-        setSignaturePreviewUrl(`/api/v1/files/${school.signatureFileId}`);
+        setSignaturePreviewUrl(getAuthFileUrl(school.signatureFileId));
+      } else {
+        setSignaturePreviewUrl('');
       }
     }
-  }, [school]);
+  }, [school, token]);
 
   // Mutation: Save School Settings
   const saveMutation = useMutation({
@@ -127,6 +341,7 @@ export default function SchoolProfilePage() {
 
       if (res?.data?.logoFileId) {
         setForm((prev) => ({ ...prev, logoFileId: res.data.logoFileId }));
+        setLogoPreviewUrl(getAuthFileUrl(res.data.logoFileId));
       }
       queryClient.invalidateQueries({ queryKey: ['school-own-profile'] });
       setSuccessMsg('Institutional logo uploaded and linked successfully!');
@@ -158,6 +373,7 @@ export default function SchoolProfilePage() {
 
       if (res?.data?.signatureFileId) {
         setForm((prev) => ({ ...prev, signatureFileId: res.data.signatureFileId }));
+        setSignaturePreviewUrl(getAuthFileUrl(res.data.signatureFileId));
       }
       queryClient.invalidateQueries({ queryKey: ['school-own-profile'] });
       setSuccessMsg('Principal signature uploaded and linked successfully!');
@@ -302,13 +518,20 @@ export default function SchoolProfilePage() {
 
                 <div className="h-24 bg-white border border-dashed border-slate-300 rounded flex items-center justify-center p-2 overflow-hidden relative">
                   {logoPreviewUrl ? (
-                    <img src={logoPreviewUrl} alt="Logo Preview" className="h-full object-contain" />
-                  ) : (
-                    <div className="text-center text-slate-400">
-                      <Sparkles className="h-6 w-6 mx-auto mb-1 text-slate-300" />
-                      <span className="text-[10px]">No logo uploaded</span>
-                    </div>
-                  )}
+                    <img
+                      src={logoPreviewUrl}
+                      alt="Logo Preview"
+                      className="h-full object-contain"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.parentElement?.querySelector('.logo-fallback')?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : null}
+                  <div className={`logo-fallback text-center text-slate-400 ${logoPreviewUrl ? 'hidden' : ''}`}>
+                    <Sparkles className="h-6 w-6 mx-auto mb-1 text-slate-300" />
+                    <span className="text-[10px]">No logo uploaded</span>
+                  </div>
                 </div>
 
                 <label className="cursor-pointer inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded border border-indigo-200 transition-colors">
@@ -333,13 +556,20 @@ export default function SchoolProfilePage() {
 
                 <div className="h-24 bg-white border border-dashed border-slate-300 rounded flex items-center justify-center p-2 overflow-hidden relative">
                   {signaturePreviewUrl ? (
-                    <img src={signaturePreviewUrl} alt="Signature Preview" className="h-full object-contain" />
-                  ) : (
-                    <div className="text-center text-slate-400">
-                      <PenTool className="h-6 w-6 mx-auto mb-1 text-slate-300" />
-                      <span className="text-[10px]">No signature uploaded</span>
-                    </div>
-                  )}
+                    <img
+                      src={signaturePreviewUrl}
+                      alt="Signature Preview"
+                      className="h-full object-contain"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.parentElement?.querySelector('.sig-fallback')?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : null}
+                  <div className={`sig-fallback text-center text-slate-400 ${signaturePreviewUrl ? 'hidden' : ''}`}>
+                    <PenTool className="h-6 w-6 mx-auto mb-1 text-slate-300" />
+                    <span className="text-[10px]">No signature uploaded</span>
+                  </div>
                 </div>
 
                 <label className="cursor-pointer inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold rounded border border-purple-200 transition-colors">
@@ -450,7 +680,7 @@ export default function SchoolProfilePage() {
                 heightMm={54.0}
                 bleedMarginMm={3.0}
                 showBleed={false}
-                elements={DEFAULT_FRONT_DESIGN.elements}
+                elements={PROFILE_PREVIEW_ELEMENTS}
                 interactive={false}
                 previewData={livePreviewData}
                 scale={4.2}

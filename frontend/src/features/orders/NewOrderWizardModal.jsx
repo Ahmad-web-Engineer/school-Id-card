@@ -102,21 +102,30 @@ export default function NewOrderWizardModal({ isOpen, onClose, onSuccess }) {
     }
   }, [isOpen]);
 
-  const templates = templatesRes?.data || [];
-  const students = studentsRes?.data?.content || [];
+  const templates = Array.isArray(templatesRes?.data)
+    ? templatesRes.data
+    : templatesRes?.data?.content || templatesRes?.content || [];
+  const students = Array.isArray(studentsRes?.data)
+    ? studentsRes.data
+    : studentsRes?.data?.content || studentsRes?.content || [];
 
   // Filter students based on search and class
   const filteredStudents = students.filter((s) => {
+    const studentName = s.studentName || s.fullName || '';
+    const admNo = s.admissionNumber || '';
+    const studentClass = s.className || s.standard || '';
     const matchesSearch =
       !studentSearch ||
-      s.fullName?.toLowerCase().includes(studentSearch.toLowerCase()) ||
-      s.admissionNumber?.toLowerCase().includes(studentSearch.toLowerCase());
-    const matchesClass = !classFilter || s.standard === classFilter;
+      studentName.toLowerCase().includes(studentSearch.toLowerCase()) ||
+      admNo.toLowerCase().includes(studentSearch.toLowerCase());
+    const matchesClass = !classFilter || studentClass === classFilter;
     return matchesSearch && matchesClass;
   });
 
   // Unique classes for filter dropdown
-  const uniqueClasses = Array.from(new Set(students.map((s) => s.standard).filter(Boolean))).sort();
+  const uniqueClasses = Array.from(
+    new Set(students.map((s) => s.className || s.standard).filter(Boolean))
+  ).sort();
 
   const handleSelectAllFiltered = () => {
     const filteredIds = filteredStudents.map((s) => s.id);
@@ -220,7 +229,7 @@ export default function NewOrderWizardModal({ isOpen, onClose, onSuccess }) {
 
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
   const selectedStudentsData = students.filter((s) => selectedStudentIds.includes(s.id));
-  const missingPhotosCount = selectedStudentsData.filter((s) => !s.hasPhoto).length;
+  const missingPhotosCount = selectedStudentsData.filter((s) => !s.photoFileId && !s.hasPhoto).length;
 
   return (
     <Modal
@@ -371,12 +380,14 @@ export default function NewOrderWizardModal({ isOpen, onClose, onSuccess }) {
                         </div>
                       )}
                       <div className="flex items-center space-x-2 mb-2">
-                        <Layers className="h-4 w-4 text-indigo-600" />
-                        <h5 className="text-xs font-semibold text-slate-900 truncate">{tpl.name}</h5>
+                        <Layers className="h-4 w-4 text-indigo-600 shrink-0" />
+                        <h5 className="text-xs font-semibold text-slate-900 truncate">
+                          {tpl.templateName || tpl.name || 'ID Card Template'}
+                        </h5>
                       </div>
                       <div className="space-y-1 text-[11px] text-slate-500">
-                        <p>Orientation: <span className="font-medium text-slate-700 capitalize">{tpl.orientation?.toLowerCase()}</span></p>
-                        <p>Dimensions: <span className="font-medium text-slate-700">{tpl.cardWidthMm} × {tpl.cardHeightMm} mm</span></p>
+                        <p>Orientation: <span className="font-medium text-slate-700 capitalize">{(tpl.orientation || (tpl.cardWidthMm > tpl.cardHeightMm ? 'Landscape' : 'Portrait')).toLowerCase()}</span></p>
+                        <p>Dimensions: <span className="font-medium text-slate-700">{tpl.cardWidthMm || 85.6} × {tpl.cardHeightMm || 54.0} mm</span></p>
                         <p>Version: <span className="font-medium text-slate-700">v{tpl.versionNumber || 1}</span></p>
                       </div>
                     </div>
@@ -474,12 +485,12 @@ export default function NewOrderWizardModal({ isOpen, onClose, onSuccess }) {
                               className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
                             />
                           </td>
-                          <td className="px-3 py-2 font-medium text-slate-900">{s.fullName}</td>
+                          <td className="px-3 py-2 font-medium text-slate-900">{s.studentName || s.fullName}</td>
                           <td className="px-3 py-2 text-slate-500 font-mono">{s.admissionNumber}</td>
-                          <td className="px-3 py-2">{s.standard}{s.section ? ` - ${s.section}` : ''}</td>
+                          <td className="px-3 py-2">{(s.className || s.standard)}{s.section ? ` - ${s.section}` : ''}</td>
                           <td className="px-3 py-2 text-slate-500">{s.rollNumber || '-'}</td>
                           <td className="px-3 py-2">
-                            {s.hasPhoto ? (
+                            {(s.photoFileId || s.hasPhoto) ? (
                               <span className="inline-flex items-center text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-medium">
                                 <Check className="h-3 w-3 mr-0.5" /> Photo Ready
                               </span>
@@ -610,7 +621,9 @@ export default function NewOrderWizardModal({ isOpen, onClose, onSuccess }) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
                 <div>
                   <span className="text-slate-500 block">Template</span>
-                  <span className="font-semibold text-slate-800">{selectedTemplate?.name || 'Selected Template'}</span>
+                  <span className="font-semibold text-slate-800">
+                    {selectedTemplate?.templateName || selectedTemplate?.name || 'Selected Template'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-500 block">ID Cards</span>
