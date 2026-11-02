@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import { extractArray, extractPagination } from '../../services/responseUtils';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -50,9 +51,8 @@ export default function AgencyJobsPage() {
       }),
   });
 
-  const jobs = jobsRes?.data?.content || [];
-  const totalPages = jobsRes?.data?.totalPages || 0;
-  const totalElements = jobsRes?.data?.totalElements || 0;
+  const jobs = extractArray(jobsRes);
+  const { totalPages, totalElements } = extractPagination(jobsRes, jobs.length);
 
   // Compute metrics
   const pendingCount = jobs.filter((j) => j.assignmentStatus === 'ASSIGNED').length;

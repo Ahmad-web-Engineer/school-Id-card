@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { extractArray } from '../../services/responseUtils';
 import { useAuthStore } from '../../store/useAuthStore';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -171,7 +172,7 @@ export default function PhotoMatcherTab({ onNavigateToRoster }) {
           size: 200,
         },
       });
-      const items = res?.data?.content || res?.content || [];
+      const items = extractArray(res);
       setAllStudents(items);
     } catch (err) {
       setErrorMessage('Failed to load enrolled students list for manual assignment.');

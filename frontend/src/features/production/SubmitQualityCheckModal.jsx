@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
@@ -6,7 +6,16 @@ import Textarea from '../../components/common/Textarea';
 import Button from '../../components/common/Button';
 import { DEFECT_CATEGORIES } from './productionConstants';
 
-export default function SubmitQualityCheckModal({ isOpen, onClose, onSubmit, isSubmitting, maxQuantity = 100 }) {
+export default function SubmitQualityCheckModal({
+  isOpen,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  maxQuantity = 100,
+  assignments = [],
+  selectedAssignmentId = '',
+  onSelectAssignment,
+}) {
   const [inspectedQuantity, setInspectedQuantity] = useState(maxQuantity > 0 ? maxQuantity : '');
   const [acceptedQuantity, setAcceptedQuantity] = useState(maxQuantity > 0 ? maxQuantity : '');
   const [rejectedQuantity, setRejectedQuantity] = useState('0');
@@ -14,6 +23,16 @@ export default function SubmitQualityCheckModal({ isOpen, onClose, onSubmit, isS
   const [defectDescription, setDefectDescription] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      const initial = maxQuantity > 0 ? maxQuantity : 100;
+      setInspectedQuantity(initial);
+      setAcceptedQuantity(initial);
+      setRejectedQuantity('0');
+      setError('');
+    }
+  }, [isOpen, maxQuantity]);
 
   const handleInspectedChange = (val) => {
     setInspectedQuantity(val);
@@ -70,6 +89,36 @@ export default function SubmitQualityCheckModal({ isOpen, onClose, onSubmit, isS
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Submit Quality Inspection Report">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {assignments && assignments.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Select Production Job / Assignment <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={selectedAssignmentId}
+              onChange={(e) => {
+                const id = e.target.value;
+                onSelectAssignment?.(id);
+                const found = assignments.find((a) => a.id === id);
+                if (found?.totalQuantity) {
+                  setInspectedQuantity(found.totalQuantity);
+                  setAcceptedQuantity(found.totalQuantity);
+                  setRejectedQuantity('0');
+                }
+              }}
+              className="w-full text-xs border border-slate-300 rounded-md py-2 px-2.5 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              required
+            >
+              <option value="">-- Choose an Assignment --</option>
+              {assignments.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.jobNumber || a.orderNumber} — {a.agencyName || 'Agency'} ({a.totalQuantity || 0} cards) [{a.assignmentStatus}]
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {error && (
           <div className="p-3 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md">
             {error}

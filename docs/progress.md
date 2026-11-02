@@ -1079,6 +1079,63 @@
 
 ---
 
+## Order History Display & Quality Control Workflow Fixes
+
+### What Was Built & Fixed
+1. **Unified Response Unpacking Engine (`frontend/src/services/responseUtils.js`):**
+   - Implemented `extractArray` and `extractPagination` to reliably handle all API response formats:
+     - Standard `PagedResponse<T>` (`{ success: true, data: [...], pagination: {...} }`) returned by school & admin order endpoints.
+     - Nested `ApiResponse<PagedResponse<T>>` (`{ success: true, data: { success: true, data: [...], pagination: {...} } }`) returned by agency jobs and QC endpoints.
+     - Spring Data `Page` objects (`{ content: [...], totalPages: ... }`).
+     - Plain arrays (`[...]`).
+
+2. **Order History Display (`OrdersPage.jsx` & `AdminOrdersPage.jsx`):**
+   - Replaced broken `res?.data?.content` lookups with `extractArray` and `extractPagination`.
+   - Fixed empty order history issue in both School Portal (`/school/orders`) and Admin Portal (`/admin/orders`).
+   - Restored accurate status counters (Pending, Quotation Ready, Approved) and pagination controls.
+
+3. **Agency Job & Assignment Lists Fixes:**
+   - **`AdminAssignmentsPage.jsx`:** Fixed `agencies`, `assignments`, and pagination extraction.
+   - **`AgencyJobsPage.jsx`:** Fixed `jobs` and pagination extraction.
+   - **`AdminProductionPage.jsx`:** Fixed `agencies` and `batches` extraction.
+   - **`AssignAgencyModal.jsx` & `ReassignJobModal.jsx`:** Fixed `agencies` list extraction for job splitting and reassignments.
+   - **`PhotoMatcherTab.jsx`:** Fixed enrolled student list extraction for manual student-photo linking.
+
+4. **Agency Quality Control (`AgencyQualityPage.jsx`):**
+   - Fixed 3-level unwrapping bug (`res.data?.data?.data`) that returned `undefined` and caused "No active production jobs to inspect".
+   - Expanded active job filter to include `ASSIGNED`, `AGENCY_ACCEPTED`, `IN_PRODUCTION`, and `COMPLETED`.
+   - Enabled "+ Submit Inspection" modal to record visual, dimensional, and barcode readability checks.
+
+5. **Admin Quality Assurance (`AdminQualityControlPage.jsx` & `SubmitQualityCheckModal.jsx`):**
+   - Added "+ Perform Quality Check" action button to the Admin Quality Assurance header and Inspection Audit Trail.
+   - Enhanced `SubmitQualityCheckModal.jsx` with an interactive job/assignment selector and reactive quantity defaults.
+   - Wired `POST /api/v1/admin/assignments/{id}/quality-checks` mutation to record admin inspections and automatically generate reprint requests for rejected cards.
+
+### How It Was Verified
+- **Frontend Production Build:** Executed `npm run build` — `vite build` completed cleanly in 8.11s with 0 errors.
+- **Backend Test Suite:** Executed `mvn test` — **169/169 automated tests passed** (0 failures, 0 errors, 0 skipped).
+- **Live End-to-End Workflow Verification via Authenticated APIs:**
+  - Authenticated as `admin@platform.com`: verified `GET /api/v1/admin/orders` returns all 3 orders with full metadata.
+  - Authenticated as `school@greenwood.edu`: verified `GET /api/v1/school/orders` returns all 3 school orders.
+  - Advanced order `ORD-2026-7E047A59` through complete lifecycle:
+    - Admin `startReview` -> `UNDER_REVIEW`
+    - Admin `verifyOrder` -> `VERIFIED`
+    - Admin `generateQuotation` -> total `53.10`
+    - School `approveQuotation` -> `APPROVED`
+    - Admin `assignOrder` -> allocated 4 items to Apex Card Printers (`JOB-2026-0001`, Assignment ID: `7a4cf62f-fbdc-4b39-9337-3da43f7250c6`).
+  - Authenticated as `agency@apexprints.com`:
+    - Verified `GET /api/v1/agency/jobs` returns `JOB-2026-0001` (4 cards).
+    - Accepted job -> `AGENCY_ACCEPTED`.
+    - Started production -> `IN_PRODUCTION`.
+    - Submitted QC inspection (`POST /api/v1/agency/jobs/{id}/quality-checks`) -> `QC-2026-0001` with status `PASSED`.
+    - Verified `GET /api/v1/agency/jobs/{id}/quality-checks` returns 1 report.
+  - Authenticated as `admin@platform.com`:
+    - Verified `GET /api/v1/admin/production/quality-checks` includes `QC-2026-0001`.
+    - Executed Admin QC check (`POST /api/v1/admin/assignments/{id}/quality-checks`) -> `QC-2026-0002` with status `PASSED`.
+    - Verified audit trail returns both inspections (`QC-2026-0001` and `QC-2026-0002`).
+
+---
+
 ## Questions & Blockers
 *None. All requirements successfully satisfied.*
 

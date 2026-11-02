@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { extractArray, extractPagination } from '../../services/responseUtils';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -8,6 +9,7 @@ import EmptyState from '../../components/common/EmptyState';
 import ErrorState from '../../components/common/ErrorState';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ReviewReprintModal from '../../features/production/ReviewReprintModal';
+import SubmitQualityCheckModal from '../../features/production/SubmitQualityCheckModal';
 import {
   QC_STATUSES,
   REPRINT_STATUSES,
@@ -41,6 +43,10 @@ export default function AdminQualityControlPage() {
   const [qcPage, setQcPage] = useState(0);
   const [qcStatusFilter, setQcStatusFilter] = useState('');
 
+  // QC Submission State
+  const [isSubmitQcOpen, setIsSubmitQcOpen] = useState(false);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState('');
+
   // 1. Fetch Reprint Requests
   const {
     data: reprintsRes,
@@ -60,8 +66,8 @@ export default function AdminQualityControlPage() {
       }),
   });
 
-  const reprints = reprintsRes?.data?.data || [];
-  const reprintPagination = reprintsRes?.data?.pagination || { page: 0, size: 10, totalElements: 0, totalPages: 0 };
+  const reprints = extractArray(reprintsRes);
+  const reprintPagination = extractPagination(reprintsRes, reprints.length);
 
   // 2. Fetch QC Inspections
   const {
@@ -82,10 +88,35 @@ export default function AdminQualityControlPage() {
       }),
   });
 
-  const qcReports = qcRes?.data?.data || [];
-  const qcPagination = qcRes?.data?.pagination || { page: 0, size: 10, totalElements: 0, totalPages: 0 };
+  const qcReports = extractArray(qcRes);
+  const qcPagination = extractPagination(qcRes, qcReports.length);
 
-  // 3. Approve Reprint Mutation
+  // 3. Fetch Assignments for Quality Checks
+  const { data: assignmentsRes } = useQuery({
+    queryKey: ['admin-assignments-for-qc'],
+    queryFn: () => api.get('/admin/assignments', { params: { page: 0, size: 200 } }),
+  });
+  const assignments = extractArray(assignmentsRes);
+
+  // 4. Submit Admin QC Mutation
+  const submitAdminQcMutation = useMutation({
+    mutationFn: async (payload) => {
+      if (!selectedAssignmentId) {
+        throw new Error('Please select an assignment to inspect.');
+      }
+      const res = await api.post(`/admin/assignments/${selectedAssignmentId}/quality-checks`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['admin-qc-inspections']);
+      queryClient.invalidateQueries(['admin-reprints']);
+      queryClient.invalidateQueries(['admin-assignments']);
+      setIsSubmitQcOpen(false);
+      setSelectedAssignmentId('');
+    },
+  });
+
+  // 5. Approve Reprint Mutation
   const approveMutation = useMutation({
     mutationFn: async ({ id, payload }) => {
       const res = await api.post(`/admin/reprints/${id}/approve`, payload);
@@ -97,7 +128,7 @@ export default function AdminQualityControlPage() {
     },
   });
 
-  // 4. Reject Reprint Mutation
+  // 6. Reject Reprint Mutation
   const rejectMutation = useMutation({
     mutationFn: async ({ id, payload }) => {
       const res = await api.post(`/admin/reprints/${id}/reject`, payload);
@@ -114,17 +145,34 @@ export default function AdminQualityControlPage() {
   const totalInspected = qcReports.reduce((acc, q) => acc + (q.inspectedQuantity || 0), 0);
   const totalDefects = qcReports.reduce((acc, q) => acc + (q.rejectedQuantity || 0), 0);
 
+  const activeSelectedAssignment = assignments.find((a) => a.id === selectedAssignmentId) || assignments[0];
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div>
-        <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-          <ShieldCheck className="h-6 w-6 text-indigo-600" />
-          Quality Assurance & Reprint Authorization
-        </h1>
-        <p className="text-xs text-slate-500 mt-1">
-          Review batch quality check reports, authorize replacement card printings, and allocate financial liabilities.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <ShieldCheck className="h-6 w-6 text-indigo-600" />
+            Quality Assurance & Reprint Authorization
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Review batch quality check reports, authorize replacement card printings, and allocate financial liabilities.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 self-start sm:self-auto"
+          onClick={() => {
+            if (assignments.length > 0 && !selectedAssignmentId) {
+              setSelectedAssignmentId(assignments[0].id);
+            }
+            setIsSubmitQcOpen(true);
+          }}
+        >
+          <ClipboardCheck className="h-4 w-4" />
+          Perform Quality Check
+        </Button>
       </div>
 
       {/* Metrics Strip */}
@@ -388,9 +436,24 @@ export default function AdminQualityControlPage() {
                 </select>
               </div>
 
-              <Button variant="ghost" size="sm" onClick={() => refetchQc()}>
-                <RefreshCw className="h-4 w-4 text-slate-600" />
-              </Button>
+              <div className="flex items-center space-x-2">
+                <Button
+                  size="xs"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1"
+                  onClick={() => {
+                    if (assignments.length > 0 && !selectedAssignmentId) {
+                      setSelectedAssignmentId(assignments[0].id);
+                    }
+                    setIsSubmitQcOpen(true);
+                  }}
+                >
+                  <ClipboardCheck className="h-3.5 w-3.5" />
+                  Perform QC
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => refetchQc()}>
+                  <RefreshCw className="h-4 w-4 text-slate-600" />
+                </Button>
+              </div>
             </div>
           </Card>
 
@@ -534,6 +597,21 @@ export default function AdminQualityControlPage() {
           isSubmitting={approveMutation.isPending || rejectMutation.isPending}
         />
       )}
+
+      {/* Admin Submit Quality Check Modal */}
+      <SubmitQualityCheckModal
+        isOpen={isSubmitQcOpen}
+        onClose={() => {
+          setIsSubmitQcOpen(false);
+          setSelectedAssignmentId('');
+        }}
+        onSubmit={(payload) => submitAdminQcMutation.mutate(payload)}
+        isSubmitting={submitAdminQcMutation.isPending}
+        maxQuantity={activeSelectedAssignment?.totalQuantity || 100}
+        assignments={assignments}
+        selectedAssignmentId={selectedAssignmentId}
+        onSelectAssignment={setSelectedAssignmentId}
+      />
     </div>
   );
 }

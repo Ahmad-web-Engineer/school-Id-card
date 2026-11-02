@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { extractArray } from '../../services/responseUtils';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -19,12 +20,12 @@ export default function AgencyQualityPage() {
     queryKey: ['agency-jobs-list-qc'],
     queryFn: async () => {
       const res = await api.get('/agency/jobs?size=50');
-      return res.data?.data?.data || [];
+      return extractArray(res);
     },
   });
 
   const activeJobs = (jobsData || []).filter(
-    (j) => j.assignmentStatus === 'IN_PRODUCTION' || j.assignmentStatus === 'COMPLETED'
+    (j) => ['ASSIGNED', 'AGENCY_ACCEPTED', 'IN_PRODUCTION', 'COMPLETED'].includes(j.assignmentStatus)
   );
 
   const currentJobId = selectedAssignmentId || (activeJobs[0]?.id || '');
@@ -39,7 +40,7 @@ export default function AgencyQualityPage() {
     queryFn: async () => {
       if (!currentJobId) return [];
       const res = await api.get(`/agency/jobs/${currentJobId}/quality-checks`);
-      return res.data?.data?.data || [];
+      return extractArray(res);
     },
     enabled: !!currentJobId,
   });
@@ -52,6 +53,8 @@ export default function AgencyQualityPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['agency-qc-checks', currentJobId]);
+      queryClient.invalidateQueries(['agency-jobs-list-qc']);
+      queryClient.invalidateQueries(['agency-jobs']);
       setIsSubmitOpen(false);
     },
   });

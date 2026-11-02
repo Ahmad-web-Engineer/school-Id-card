@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import { extractArray, extractPagination } from '../../services/responseUtils';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -57,10 +58,9 @@ export default function AdminOrdersPage() {
       }),
   });
 
-  const schools = schoolsRes?.data?.content || [];
-  const orders = ordersRes?.data?.content || [];
-  const totalPages = ordersRes?.data?.totalPages || 0;
-  const totalElements = ordersRes?.data?.totalElements || 0;
+  const schools = extractArray(schoolsRes);
+  const orders = extractArray(ordersRes);
+  const { totalPages, totalElements } = extractPagination(ordersRes, orders.length);
 
   // Filter local search query
   const displayOrders = orders.filter((o) =>

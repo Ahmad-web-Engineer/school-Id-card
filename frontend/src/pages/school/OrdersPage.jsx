@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api';
+import { extractArray, extractPagination } from '../../services/responseUtils';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -80,9 +81,8 @@ export default function OrdersPage() {
     },
   });
 
-  const orders = ordersRes?.data?.content || [];
-  const totalPages = ordersRes?.data?.totalPages || 0;
-  const totalElements = ordersRes?.data?.totalElements || 0;
+  const orders = extractArray(ordersRes);
+  const { totalPages, totalElements } = extractPagination(ordersRes, orders.length);
 
   // Filtered by local search query if needed
   const displayOrders = orders.filter((o) =>

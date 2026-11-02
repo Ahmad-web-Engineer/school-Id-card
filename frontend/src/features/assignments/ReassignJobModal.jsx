@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../services/api';
+import { extractArray } from '../../services/responseUtils';
 import Modal from '../../components/common/Modal';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -23,7 +24,7 @@ export default function ReassignJobModal({ isOpen, onClose, assignment, onSucces
     enabled: isOpen,
   });
 
-  const agencies = agenciesRes?.data?.content || [];
+  const agencies = extractArray(agenciesRes);
 
   const reassignMutation = useMutation({
     mutationFn: (payload) =>

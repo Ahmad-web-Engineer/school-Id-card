@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
+import { extractArray, extractPagination } from '../../services/responseUtils';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -34,7 +35,7 @@ export default function AdminProductionPage() {
     queryFn: () => api.get('/admin/agencies', { params: { page: 0, size: 200 } }),
   });
 
-  const agencies = agenciesRes?.data?.content || [];
+  const agencies = extractArray(agenciesRes);
 
   // 2. Fetch admin production batches
   const {
@@ -56,10 +57,8 @@ export default function AdminProductionPage() {
       }),
   });
 
-  const batches = batchesRes?.data?.data || [];
-  const pagination = batchesRes?.data?.pagination || { page: 0, size: 10, totalElements: 0, totalPages: 0 };
-  const totalPages = pagination.totalPages || 0;
-  const totalElements = pagination.totalElements || 0;
+  const batches = extractArray(batchesRes);
+  const { totalPages, totalElements } = extractPagination(batchesRes, batches.length);
 
   // Compute summary metrics
   const inProgressCount = batches.filter((b) => b.productionStatus === 'IN_PROGRESS').length;

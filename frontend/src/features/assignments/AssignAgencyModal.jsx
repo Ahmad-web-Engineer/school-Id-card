@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../services/api';
+import { extractArray } from '../../services/responseUtils';
 import Modal from '../../components/common/Modal';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -19,7 +20,7 @@ export default function AssignAgencyModal({ isOpen, onClose, order, onSuccess })
     enabled: isOpen,
   });
 
-  const agencies = agenciesRes?.data?.content || [];
+  const agencies = extractArray(agenciesRes);
 
   // Initialize with single assignment row on open
   useEffect(() => {

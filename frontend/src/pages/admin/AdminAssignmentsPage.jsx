@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { extractArray, extractPagination } from '../../services/responseUtils';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -41,7 +42,7 @@ export default function AdminAssignmentsPage() {
     queryFn: () => api.get('/admin/agencies', { params: { page: 0, size: 200 } }),
   });
 
-  const agencies = agenciesRes?.data?.content || [];
+  const agencies = extractArray(agenciesRes);
 
   // 2. Fetch assignments
   const {
@@ -64,9 +65,8 @@ export default function AdminAssignmentsPage() {
       }),
   });
 
-  const assignments = assignmentsRes?.data?.content || [];
-  const totalPages = assignmentsRes?.data?.totalPages || 0;
-  const totalElements = assignmentsRes?.data?.totalElements || 0;
+  const assignments = extractArray(assignmentsRes);
+  const { totalPages, totalElements } = extractPagination(assignmentsRes, assignments.length);
 
   // Compute metrics
   const pendingCount = assignments.filter((a) => a.assignmentStatus === 'ASSIGNED').length;
