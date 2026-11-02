@@ -89,7 +89,7 @@ export default function AdminOrderDetailPage() {
 
   const requestCorrectionMutation = useMutation({
     mutationFn: () =>
-      api.post(`/admin/orders/${id}/request-correction`, {
+      api.post(`/admin/orders/${id}/corrections`, {
         remarks: correctionRemarks,
       }),
     onSuccess: () => {
@@ -105,10 +105,12 @@ export default function AdminOrderDetailPage() {
     mutationFn: () => {
       const discount = parseFloat(quoteDiscount) || 0;
       return api.post(`/admin/orders/${id}/quotation`, {
-        discountAmount: discount,
+        discount: discount,
+        taxRate: 18.00,
+        validDays: 15,
         notes: quoteNotes.trim() || undefined,
         items: quoteItems.map((item) => ({
-          itemDescription: item.itemDescription,
+          productDescription: item.itemDescription || item.productDescription || 'PVC ID Card',
           quantity: parseInt(item.quantity, 10),
           unitPrice: parseFloat(item.unitPrice),
         })),
@@ -126,9 +128,9 @@ export default function AdminOrderDetailPage() {
   const handleOpenQuotationModal = () => {
     if (order?.items) {
       const initialItems = order.items.map((i) => ({
-        itemDescription: i.itemDescription,
+        itemDescription: i.productType || i.itemDescription || 'PVC ID Card',
         quantity: i.quantity,
-        unitPrice: (i.unitPrice && Number(i.unitPrice) > 0) ? Number(i.unitPrice).toFixed(2) : (i.itemType === 'ID_CARD' ? '45.00' : '20.00'),
+        unitPrice: (i.unitSellingPrice && Number(i.unitSellingPrice) > 0) ? Number(i.unitSellingPrice).toFixed(2) : '45.00',
       }));
       setQuoteItems(initialItems);
       setQuoteDiscount('0.00');
@@ -365,10 +367,10 @@ export default function AdminOrderDetailPage() {
               <tbody className="divide-y divide-slate-100 bg-white">
                 {quotation.items.map((item, idx) => (
                   <tr key={item.id || idx}>
-                    <td className="px-3 py-2 text-slate-800 font-medium">{item.itemDescription}</td>
+                    <td className="px-3 py-2 text-slate-800 font-medium">{item.productDescription || item.itemDescription}</td>
                     <td className="px-3 py-2 text-right text-slate-600">{item.quantity}</td>
                     <td className="px-3 py-2 text-right text-slate-600 font-mono">₹{Number(item.unitPrice).toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right text-slate-900 font-semibold font-mono">₹{Number(item.totalPrice).toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right text-slate-900 font-semibold font-mono">₹{Number(item.amount || item.totalPrice || 0).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -427,7 +429,7 @@ export default function AdminOrderDetailPage() {
             <div className="space-y-1.5 text-xs">
               {order.items?.map((item, idx) => (
                 <div key={idx} className="flex justify-between text-slate-700">
-                  <span className="truncate max-w-[180px]">{item.itemDescription}</span>
+                  <span className="truncate max-w-[180px]">{item.productType || item.itemDescription}</span>
                   <span className="font-medium font-mono">× {item.quantity}</span>
                 </div>
               ))}

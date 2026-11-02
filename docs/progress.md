@@ -328,7 +328,7 @@
    - Routes wired in `App.jsx` under `/school/orders`, `/school/orders/:id`, `/admin/orders`, `/admin/orders/:id`.
 
 ### How It Was Verified
-- **Backend Test Suite:** Executed `mvn test` across all modules — **95/95 tests passed** (0 failures, 0 errors, 0 skipped):
+- **Backend Test Suite:** Executed `mvn test` across all modules — **107/107 tests passed** (0 failures, 0 errors, 0 skipped):
   - `AuthControllerTest` (4 tests)
   - `GlobalExceptionHandlerTest` (5 tests)
   - `FileSecurityTest` (8 tests)
@@ -344,6 +344,7 @@
   - `CardTemplateIntegrationTest` (5 tests)
   - `CardTemplateSecurityTest` (23 tests)
   - `OrderIntegrationTest` (4 tests)
+  - `OrderSecurityTest` (12 tests)
 - **Frontend Build:** Executed `npm run build` (`vite build`) — completed cleanly in 7.56s with 0 errors (`dist/assets/index-BsDnqmdB.js 546.48 kB │ gzip: 147.92 kB`).
 - **Non-Negotiables Checklist:**
   - Rule 1 (School sees no agency data): verified.

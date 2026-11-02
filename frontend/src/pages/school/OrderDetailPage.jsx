@@ -80,7 +80,7 @@ export default function OrderDetailPage() {
 
   // Approve Quotation mutation
   const approveQuotationMutation = useMutation({
-    mutationFn: () => api.post(`/school/orders/${id}/quotation/approve`),
+    mutationFn: () => api.post(`/school/orders/${id}/approve-quotation`),
     onSuccess: () => {
       setActionSuccess('Quotation approved successfully! Your order has moved to production queue.');
       setIsApproveModalOpen(false);
