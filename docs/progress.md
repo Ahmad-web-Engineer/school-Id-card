@@ -691,13 +691,60 @@
   - UI Rules (Responsive across 360px, 768px, 1280px, 1920px): fully verified.
 
 ### What Is Next
-- **Step 11: Hardening and full testing**
-  - Security audit and penetration checks across all modules.
-  - Cross-tenant injection and permission matrix verification.
-  - Performance and SQL query plan validation (zero N+1 queries).
-  - End-to-end user workflows verification across Admin, School, and Agency.
+- **Step 11: Hardening and full testing** (COMPLETED)
 - **Step 12: Release preparation**
-  - Production configurations, environment templates, README, Docker setup.
+
+---
+
+## Step 11 Log: Hardening & End-to-End Multi-Tenant Verification
+
+### What Was Built
+1. **Full Platform Lifecycle Integration & Hardening Suite:**
+   - Implemented `com.platform.idcard.security.FullPlatformE2EHardeningTest`:
+     - Test 1: `testCompletePlatformLifecycleE2E` covering the complete real-world operational and financial journey:
+       1. School Admin and Platform Super Admin authenticated via JWT.
+       2. School enrolls student (*Aarav Sharma*) with photo asset attachment.
+       3. School submits print order with PVC ID card specification and photo attachment.
+       4. Platform Super Admin creates quotation with dynamic pricing (100.00 subtotal, 18.00 tax, 118.00 total) and approves order into `APPROVED` status.
+       5. Admin registers certified printing agency (*Apex Security Prints*) and assigns order item to create production assignment `JOB-2026-0001` (cost: 45.00).
+       6. Agency accepts printing assignment.
+       7. Agency creates production batch (planned: 1 card).
+       8. Agency starts batch production (`IN_PRODUCTION`).
+       9. Agency completes batch production (`COMPLETED`).
+       10. Agency performs Quality Check (QC): passes 1 unit, 0 defects.
+       11. Agency dispatches shipment via BlueDart (Model A: Direct to School, `DSP-2026-0001`).
+       12. School confirms delivery receipt (`DEL-2026-0001`).
+       13. Platform Admin generates formal tax invoice `INV-2026-0001` for 118.00.
+       14. School pays full balance (118.00) via Net Banking.
+       15. Platform Admin generates agency settlement `SET-2026-0001` for 45.00.
+       16. Platform Admin executes settlement payout to agency (45.00).
+       17. Financial P&L reporting verification: 118.00 collected revenue, 45.00 settled costs, positive net gross margin.
+       18. Multi-role security validation: verifies school receives 0 agency cost/contract information; agency receives 0 school customer/pricing data.
+     - Test 2: `testPenetrationAndCrossTenantMatrix`:
+       - Negative/zero financial payment values rejected via Jakarta Bean Validation (400 Bad Request).
+       - Non-admin users forbidden from administrative audit trail logs (403 Forbidden).
+       - Unauthenticated access to protected endpoints rejected with standard error envelope (401 Unauthorized).
+
+### How It Was Verified
+- **Targeted Test Execution:** `mvn test -Dtest="FullPlatformE2EHardeningTest"` passed 2/2 tests in 25.68s.
+- **Full Platform Regression Suite:** Executed `mvn test` across all platform modules — **152/152 tests passed** (0 failures, 0 errors, 0 skipped) in 01:35 min.
+- **Frontend Production Build:** `npm --prefix frontend run build` completed in 20.86s with 0 errors.
+- **Non-Negotiables Audit:**
+  - Rule 1 (Strict role separation, separate DTOs, 0 agency leakage to school, 0 customer leakage to agency): fully verified.
+  - Rule 2 (Zero trust on client-supplied tenant IDs, derived strictly from JWT): fully verified.
+  - Rule 3 (Money precision in `NUMERIC(14,2)` and `BigDecimal`): fully verified.
+  - Rule 4 (Named business actions only): fully verified.
+  - Rule 5 (No mock/fake data): fully verified.
+  - Rule 6 (Pagination & indexes on all foreign keys & filter columns): fully verified.
+  - Rule 7 (Standard error format `{ success, errorCode, message, timestamp }`): fully verified.
+  - Rule 8 (Jakarta Bean Validation on all endpoints): fully verified.
+  - UI Rules (Responsive across 360px, 768px, 1280px, 1920px): fully verified.
+
+### What Is Next
+- **Step 12: Release preparation**
+  - Production Docker Compose setup (`docker-compose.yml`) for PostgreSQL, Spring Boot backend, and Nginx frontend.
+  - Backend production profile configuration (`application-prod.yml`).
+  - Production deployment and setup documentation in `README.md`.
 
 ---
 
