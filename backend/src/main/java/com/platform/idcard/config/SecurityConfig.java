@@ -50,7 +50,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // Public system, error, and health check
-                        .requestMatchers("/api/v1/health", "/error").permitAll()
+                        .requestMatchers("/", "/api/v1/health", "/error").permitAll()
                         // Public auth endpoints
                         .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
                         // Swagger & OpenAPI documentation
