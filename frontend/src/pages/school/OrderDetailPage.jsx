@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { extractArray } from '../../services/responseUtils';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -26,8 +27,11 @@ import {
   FileText,
   Search,
   Check,
-  Printer
+  Printer,
+  Download,
+  Eye,
 } from 'lucide-react';
+import SingleCardPreviewModal from '../../features/templates/SingleCardPreviewModal';
 
 const ORDER_STEPS = [
   { key: 'DRAFT', label: 'Draft' },
@@ -56,8 +60,56 @@ export default function OrderDetailPage() {
   const [studentSearch, setStudentSearch] = useState('');
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [actionError, setActionError] = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
+
+  // Student Card Preview & Download State
+  const [selectedPreviewStudent, setSelectedPreviewStudent] = useState(null);
+  const [downloadingStudentId, setDownloadingStudentId] = useState(null);
+
+  const handleDownloadPdf = async () => {
+    try {
+      setIsDownloadingPdf(true);
+      setActionError(null);
+      const res = await api.get(`/school/orders/${id}/print-pdf`, { responseType: 'blob' });
+      const blob = new Blob([res], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${order.orderNumber || 'order'}_cards_proof.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to generate cards proof PDF.');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
+  const handleDownloadSinglePdf = async (student) => {
+    const studentId = student.studentId || student.id;
+    try {
+      setDownloadingStudentId(studentId);
+      setActionError(null);
+      const res = await api.get(`/school/orders/${id}/students/${studentId}/print-pdf`, { responseType: 'blob' });
+      const blob = new Blob([res], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `card_${student.admissionNumber || studentId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to generate single student ID card PDF proof.');
+    } finally {
+      setDownloadingStudentId(null);
+    }
+  };
 
   // Fetch Order Details
   const {
@@ -88,7 +140,7 @@ export default function OrderDetailPage() {
     retry: false,
   });
 
-  const deliveries = deliveriesRes?.data?.data || [];
+  const deliveries = extractArray(deliveriesRes);
 
   // Confirm Delivery mutation (Step 8)
   const confirmDeliveryMutation = useMutation({
@@ -207,6 +259,19 @@ export default function OrderDetailPage() {
 
         {/* Header Actions */}
         <div className="flex items-center space-x-2">
+          {['APPROVED', 'IN_PRODUCTION', 'PRINTING_COMPLETED', 'QUALITY_CHECK', 'DISPATCHED', 'PARTIALLY_DELIVERED', 'DELIVERED'].includes(order.orderStatus) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
+              onClick={handleDownloadPdf}
+              disabled={isDownloadingPdf}
+            >
+              {isDownloadingPdf ? <LoadingSpinner size="xs" /> : <Download className="h-4 w-4 text-indigo-600" />}
+              Download Cards Proof PDF
+            </Button>
+          )}
+
           {order.orderStatus === 'DRAFT' && (
             <Button
               size="sm"
@@ -621,6 +686,7 @@ export default function OrderDetailPage() {
                 <th className="px-3 py-2.5 text-left">Blood Group</th>
                 <th className="px-3 py-2.5 text-left">Emergency Contact</th>
                 <th className="px-3 py-2.5 text-left">Photo</th>
+                <th className="px-3 py-2.5 text-right">Card Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 text-slate-800 bg-white">
@@ -630,7 +696,7 @@ export default function OrderDetailPage() {
                   <td className="px-3 py-2 font-medium text-slate-900">{s.studentName}</td>
                   <td className="px-3 py-2 text-slate-600 font-mono">{s.admissionNumber}</td>
                   <td className="px-3 py-2 text-slate-700">
-                    {s.standard}{s.section ? ` - ${s.section}` : ''}
+                    {s.standard || s.className}{s.section ? ` - ${s.section}` : ''}
                   </td>
                   <td className="px-3 py-2 text-slate-500">{s.rollNumber || '-'}</td>
                   <td className="px-3 py-2 text-slate-600">{s.bloodGroup || '-'}</td>
@@ -645,6 +711,32 @@ export default function OrderDetailPage() {
                         None
                       </span>
                     )}
+                  </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPreviewStudent(s)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100"
+                        title="Preview live ID card proof"
+                      >
+                        <Eye className="w-3 h-3" />
+                        Preview
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadSinglePdf(s)}
+                        disabled={downloadingStudentId === (s.studentId || s.id)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-md hover:bg-slate-200"
+                        title="Download student proof PDF"
+                      >
+                        {downloadingStudentId === (s.studentId || s.id) ? (
+                          <LoadingSpinner size="sm" />
+                        ) : (
+                          <Download className="w-3 h-3" />
+                        )}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -699,6 +791,26 @@ export default function OrderDetailPage() {
           order={order}
           onSubmit={(payload) => confirmDeliveryMutation.mutate(payload)}
           isSubmitting={confirmDeliveryMutation.isPending}
+        />
+      )}
+
+      {/* Single Card Proof Inspection Modal */}
+      {selectedPreviewStudent && (
+        <SingleCardPreviewModal
+          isOpen={!!selectedPreviewStudent}
+          onClose={() => setSelectedPreviewStudent(null)}
+          student={selectedPreviewStudent}
+          cardSpecs={{
+            widthMm: order.cardWidthMm || 85.6,
+            heightMm: order.cardHeightMm || 54.0,
+            bleedMarginMm: 3.0,
+            frontDesignJson: order.frontDesignJson,
+            backDesignJson: order.backDesignJson,
+            schoolName: order.schoolName,
+            schoolLogoFileId: order.schoolLogoFileId,
+          }}
+          onDownloadPdf={handleDownloadSinglePdf}
+          isDownloadingPdf={downloadingStudentId === (selectedPreviewStudent?.studentId || selectedPreviewStudent?.id)}
         />
       )}
     </div>

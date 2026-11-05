@@ -1,5 +1,6 @@
 package com.platform.idcard.order.dto;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -30,5 +31,10 @@ public record AdminOrderDetailResponse(
         Instant createdAt,
         List<OrderItemResponse> items,
         List<OrderStudentSnapshotResponse> students,
-        QuotationResponse quotation
+        QuotationResponse quotation,
+        BigDecimal cardWidthMm,
+        BigDecimal cardHeightMm,
+        String frontDesignJson,
+        String backDesignJson,
+        String schoolLogoFileId
 ) {}

@@ -14,6 +14,7 @@ import {
   formatCurrency,
 } from '../../features/finance/financeConstants';
 import api from '../../services/api';
+import { extractArray } from '../../services/responseUtils';
 
 export default function AdminFinancePage() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -39,10 +40,10 @@ export default function AdminFinancePage() {
         api.get('/admin/finance/settlements'),
       ]);
 
-      setSummary(sumRes.data?.data || null);
-      setInvoices(invRes.data?.data?.data || []);
-      setPayments(payRes.data?.data?.data || []);
-      setSettlements(setRes.data?.data?.data || []);
+      setSummary(sumRes?.data?.data || sumRes?.data || null);
+      setInvoices(extractArray(invRes));
+      setPayments(extractArray(payRes));
+      setSettlements(extractArray(setRes));
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load global financial records');
     } finally {

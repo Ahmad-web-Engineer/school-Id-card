@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { extractArray } from '../../services/responseUtils';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -22,7 +23,7 @@ export default function AgencyProductionPage() {
     queryKey: ['agency-jobs-list'],
     queryFn: async () => {
       const res = await api.get('/agency/jobs?size=50');
-      return res.data?.data?.data || [];
+      return extractArray(res);
     },
   });
 

@@ -9,6 +9,7 @@ import ErrorState from '../../components/common/ErrorState';
 import RecordPaymentModal from '../../features/finance/RecordPaymentModal';
 import { INVOICE_STATUS_VARIANTS, PAYMENT_STATUS_VARIANTS, formatCurrency } from '../../features/finance/financeConstants';
 import api from '../../services/api';
+import { extractArray } from '../../services/responseUtils';
 
 export default function SchoolFinancePage() {
   const [activeTab, setActiveTab] = useState('invoices');
@@ -32,9 +33,9 @@ export default function SchoolFinancePage() {
         api.get('/school/finance/payments'),
       ]);
 
-      setSummary(sumRes.data?.data || null);
-      setInvoices(invRes.data?.data?.data || []);
-      setPayments(payRes.data?.data?.data || []);
+      setSummary(sumRes?.data?.data || sumRes?.data || null);
+      setInvoices(extractArray(invRes));
+      setPayments(extractArray(payRes));
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load financial records');
     } finally {

@@ -1,6 +1,7 @@
 package com.platform.idcard.agencyjob.dto;
 
 import com.platform.idcard.agencyjob.entity.AssignmentStatus;
+import com.platform.idcard.order.dto.OrderStudentSnapshotResponse;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -30,5 +31,7 @@ public record AdminAgencyAssignmentDetailResponse(
         String rejectionReason,
         String notes,
         Integer totalAssignedQuantity,
-        List<AdminAgencyJobItemResponse> jobItems
+        List<AdminAgencyJobItemResponse> jobItems,
+        AgencyCardSpecificationsResponse specs,
+        List<OrderStudentSnapshotResponse> students
 ) {}

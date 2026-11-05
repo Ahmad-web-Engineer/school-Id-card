@@ -1,6 +1,7 @@
 package com.platform.idcard.agencyjob.dto;
 
 import com.platform.idcard.agencyjob.entity.AssignmentStatus;
+import com.platform.idcard.order.dto.OrderStudentSnapshotResponse;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -18,5 +19,6 @@ public record AgencyJobDetailResponse(
         String notes,
         String rejectionReason,
         AgencyCardSpecificationsResponse cardSpecifications,
-        List<AgencyJobItemResponse> items
+        List<AgencyJobItemResponse> items,
+        List<OrderStudentSnapshotResponse> students
 ) {}

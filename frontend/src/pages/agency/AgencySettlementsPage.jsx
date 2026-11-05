@@ -7,6 +7,7 @@ import EmptyState from '../../components/common/EmptyState';
 import ErrorState from '../../components/common/ErrorState';
 import { SETTLEMENT_STATUS_VARIANTS, formatCurrency } from '../../features/finance/financeConstants';
 import api from '../../services/api';
+import { extractArray } from '../../services/responseUtils';
 
 export default function AgencySettlementsPage() {
   const [summary, setSummary] = useState(null);
@@ -23,8 +24,8 @@ export default function AgencySettlementsPage() {
         api.get('/agency/finance/settlements'),
       ]);
 
-      setSummary(sumRes.data?.data || null);
-      setSettlements(setRes.data?.data?.data || []);
+      setSummary(sumRes?.data?.data || sumRes?.data || null);
+      setSettlements(extractArray(setRes));
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load agency settlement statements');
     } finally {

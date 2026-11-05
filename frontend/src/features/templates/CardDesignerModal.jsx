@@ -8,6 +8,7 @@ import CardCanvas from './CardCanvas';
 import ElementPalette from './ElementPalette';
 import PropertyInspector from './PropertyInspector';
 import JsonPreviewModal from './JsonPreviewModal';
+import ImportDesignModal from './ImportDesignModal';
 import {
   DEFAULT_FRONT_DESIGN,
   DEFAULT_BACK_DESIGN,
@@ -29,6 +30,7 @@ import {
   ZoomOut,
   Maximize2,
   X,
+  Sparkles,
 } from 'lucide-react';
 
 export default function CardDesignerModal({
@@ -49,14 +51,17 @@ export default function CardDesignerModal({
   const [showBleed, setShowBleed] = useState(true);
   const [zoomScale, setZoomScale] = useState(4.8);
 
-  // Design elements for both sides
+  // Design elements and background colors for both sides
   const [frontElements, setFrontElements] = useState(DEFAULT_FRONT_DESIGN.elements);
   const [backElements, setBackElements] = useState(DEFAULT_BACK_DESIGN.elements);
+  const [frontBgColor, setFrontBgColor] = useState(DEFAULT_FRONT_DESIGN.backgroundColor || '#ffffff');
+  const [backBgColor, setBackBgColor] = useState(DEFAULT_BACK_DESIGN.backgroundColor || '#f8fafc');
   const [selectedElementId, setSelectedElementId] = useState(null);
 
-  // Preview & Inspector toggles
+  // Preview, Inspector & Import modal toggles
   const [useSampleData, setUseSampleData] = useState(true);
   const [isJsonModalOpen, setIsJsonModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Current selected version
   const [selectedVersionId, setSelectedVersionId] = useState(null);
@@ -82,7 +87,7 @@ export default function CardDesignerModal({
     versions[0] ||
     null;
 
-  // On template loaded or version changed, populate design elements
+  // On template loaded or version changed, populate design elements and background colors
   useEffect(() => {
     if (currentVersion) {
       setWidthMm(currentVersion.cardWidthMm || 85.6);
@@ -94,8 +99,13 @@ export default function CardDesignerModal({
           const parsed = typeof currentVersion.frontDesignJson === 'string'
             ? JSON.parse(currentVersion.frontDesignJson)
             : currentVersion.frontDesignJson;
-          if (parsed && Array.isArray(parsed.elements)) {
-            setFrontElements(parsed.elements);
+          if (parsed) {
+            if (Array.isArray(parsed.elements)) {
+              setFrontElements(parsed.elements);
+            }
+            if (parsed.backgroundColor) {
+              setFrontBgColor(parsed.backgroundColor);
+            }
           }
         }
       } catch (e) {
@@ -107,8 +117,13 @@ export default function CardDesignerModal({
           const parsed = typeof currentVersion.backDesignJson === 'string'
             ? JSON.parse(currentVersion.backDesignJson)
             : currentVersion.backDesignJson;
-          if (parsed && Array.isArray(parsed.elements)) {
-            setBackElements(parsed.elements);
+          if (parsed) {
+            if (Array.isArray(parsed.elements)) {
+              setBackElements(parsed.elements);
+            }
+            if (parsed.backgroundColor) {
+              setBackBgColor(parsed.backgroundColor);
+            }
           }
         }
       } catch (e) {
@@ -204,8 +219,8 @@ export default function CardDesignerModal({
       cardWidthMm: widthMm,
       cardHeightMm: heightMm,
       bleedMarginMm: bleedMarginMm,
-      frontDesignJson: JSON.stringify({ elements: frontElements }),
-      backDesignJson: JSON.stringify({ elements: backElements }),
+      frontDesignJson: JSON.stringify({ backgroundColor: frontBgColor, elements: frontElements }),
+      backDesignJson: JSON.stringify({ backgroundColor: backBgColor, elements: backElements }),
       autoApprove: false,
     });
   };
@@ -217,10 +232,57 @@ export default function CardDesignerModal({
       cardWidthMm: widthMm,
       cardHeightMm: heightMm,
       bleedMarginMm: bleedMarginMm,
-      frontDesignJson: JSON.stringify({ elements: frontElements }),
-      backDesignJson: JSON.stringify({ elements: backElements }),
+      frontDesignJson: JSON.stringify({ backgroundColor: frontBgColor, elements: frontElements }),
+      backDesignJson: JSON.stringify({ backgroundColor: backBgColor, elements: backElements }),
       autoApprove: true,
     });
+  };
+
+  // Preset & Custom JSON Import Handlers
+  const handleApplyPreset = (preset) => {
+    if (preset.front?.elements) {
+      setFrontElements(preset.front.elements);
+    }
+    if (preset.front?.backgroundColor) {
+      setFrontBgColor(preset.front.backgroundColor);
+    }
+    if (preset.back?.elements) {
+      setBackElements(preset.back.elements);
+    }
+    if (preset.back?.backgroundColor) {
+      setBackBgColor(preset.back.backgroundColor);
+    }
+    setSelectedElementId(null);
+    setActionMessage(`Preset "${preset.name}" applied successfully! Click Save Draft or Save & Publish to save.`);
+    setTimeout(() => setActionMessage(null), 5000);
+  };
+
+  const handleImportCustomJson = (parsed) => {
+    if (parsed.front && parsed.back) {
+      if (parsed.front.elements) setFrontElements(parsed.front.elements);
+      if (parsed.front.backgroundColor) setFrontBgColor(parsed.front.backgroundColor);
+      if (parsed.back.elements) setBackElements(parsed.back.elements);
+      if (parsed.back.backgroundColor) setBackBgColor(parsed.back.backgroundColor);
+    } else if (Array.isArray(parsed.elements)) {
+      if (activeSide === 'front') {
+        setFrontElements(parsed.elements);
+        if (parsed.backgroundColor) setFrontBgColor(parsed.backgroundColor);
+      } else {
+        setBackElements(parsed.elements);
+        if (parsed.backgroundColor) setBackBgColor(parsed.backgroundColor);
+      }
+    } else if (Array.isArray(parsed)) {
+      if (activeSide === 'front') {
+        setFrontElements(parsed);
+      } else {
+        setBackElements(parsed);
+      }
+    }
+    if (parsed.cardWidthMm) setWidthMm(parsed.cardWidthMm);
+    if (parsed.cardHeightMm) setHeightMm(parsed.cardHeightMm);
+    setSelectedElementId(null);
+    setActionMessage('Custom design imported successfully!');
+    setTimeout(() => setActionMessage(null), 4000);
   };
 
   // 2. Mutation: Submit for Approval
@@ -347,6 +409,17 @@ export default function CardDesignerModal({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsImportModalOpen(true)}
+              className="flex items-center gap-1.5 text-indigo-700 border-indigo-200 hover:bg-indigo-50"
+              title="Choose from high-contrast presets or import custom JSON"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Presets & Import</span>
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -571,6 +644,7 @@ export default function CardDesignerModal({
               bleedMarginMm={bleedMarginMm}
               showBleed={showBleed}
               elements={currentElements}
+              backgroundColor={activeSide === 'front' ? frontBgColor : backBgColor}
               selectedElementId={selectedElementId}
               onSelectElement={setSelectedElementId}
               onElementChange={handleUpdateElement}
@@ -589,6 +663,14 @@ export default function CardDesignerModal({
               onDuplicateElement={handleDuplicateElement}
               cardWidthMm={widthMm}
               cardHeightMm={heightMm}
+              canvasBgColor={activeSide === 'front' ? frontBgColor : backBgColor}
+              onUpdateCanvasBgColor={(newColor) => {
+                if (activeSide === 'front') {
+                  setFrontBgColor(newColor);
+                } else {
+                  setBackBgColor(newColor);
+                }
+              }}
             />
           </div>
         </div>
@@ -603,6 +685,14 @@ export default function CardDesignerModal({
         widthMm={widthMm}
         heightMm={heightMm}
         bleedMarginMm={bleedMarginMm}
+      />
+
+      {/* Import & Presets Modal */}
+      <ImportDesignModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onApplyPreset={handleApplyPreset}
+        onImportCustomJson={handleImportCustomJson}
       />
     </div>
   );

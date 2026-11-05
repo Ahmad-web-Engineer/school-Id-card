@@ -45,6 +45,17 @@ export default function AgencyQualityPage() {
     enabled: !!currentJobId,
   });
 
+  // Fetch full details of current job for live card proof inspection
+  const { data: currentJobDetail } = useQuery({
+    queryKey: ['agency-job-detail-qc', currentJobId],
+    queryFn: async () => {
+      if (!currentJobId) return null;
+      const res = await api.get(`/agency/jobs/${currentJobId}`);
+      return res.data?.data || null;
+    },
+    enabled: !!currentJobId,
+  });
+
   // Submit QC Mutation
   const submitQcMutation = useMutation({
     mutationFn: async (payload) => {
@@ -226,7 +237,10 @@ export default function AgencyQualityPage() {
         onClose={() => setIsSubmitOpen(false)}
         onSubmit={(payload) => submitQcMutation.mutate(payload)}
         isSubmitting={submitQcMutation.isPending}
-        maxQuantity={selectedJob?.totalQuantity || 100}
+        maxQuantity={currentJobDetail?.totalQuantity || selectedJob?.totalQuantity || 100}
+        job={currentJobDetail || selectedJob}
+        students={currentJobDetail?.students}
+        cardSpecs={currentJobDetail?.cardSpecifications}
       />
     </div>
   );

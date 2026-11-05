@@ -14,13 +14,20 @@ import com.platform.idcard.common.exception.ResourceNotFoundException;
 import com.platform.idcard.common.exception.ValidationException;
 import com.platform.idcard.common.response.PagedResponse;
 import com.platform.idcard.common.response.PaginationMeta;
+import com.platform.idcard.order.dto.OrderStudentSnapshotResponse;
 import com.platform.idcard.order.entity.OrderStatus;
+import com.platform.idcard.order.entity.OrderStudentItem;
 import com.platform.idcard.order.entity.PrintingOrder;
 import com.platform.idcard.order.entity.PrintingOrderItem;
+import com.platform.idcard.order.repository.OrderStudentItemRepository;
 import com.platform.idcard.order.repository.PrintingOrderRepository;
 import com.platform.idcard.organization.entity.Agency;
+import com.platform.idcard.organization.entity.School;
 import com.platform.idcard.organization.repository.AgencyRepository;
+import com.platform.idcard.student.entity.Student;
+import com.platform.idcard.template.entity.CardTemplate;
 import com.platform.idcard.template.entity.TemplateVersion;
+import com.platform.idcard.template.service.CardPdfRenderingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -45,19 +52,25 @@ public class AgencyJobService {
     private final PrintingOrderRepository printingOrderRepository;
     private final AgencyRepository agencyRepository;
     private final UserRepository userRepository;
+    private final OrderStudentItemRepository orderStudentItemRepository;
+    private final CardPdfRenderingService cardPdfRenderingService;
 
     public AgencyJobService(
             AgencyAssignmentRepository agencyAssignmentRepository,
             AgencyJobItemRepository agencyJobItemRepository,
             PrintingOrderRepository printingOrderRepository,
             AgencyRepository agencyRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            OrderStudentItemRepository orderStudentItemRepository,
+            CardPdfRenderingService cardPdfRenderingService
     ) {
         this.agencyAssignmentRepository = agencyAssignmentRepository;
         this.agencyJobItemRepository = agencyJobItemRepository;
         this.printingOrderRepository = printingOrderRepository;
         this.agencyRepository = agencyRepository;
         this.userRepository = userRepository;
+        this.orderStudentItemRepository = orderStudentItemRepository;
+        this.cardPdfRenderingService = cardPdfRenderingService;
     }
 
     /**
@@ -491,6 +504,49 @@ public class AgencyJobService {
                 ))
                 .toList();
 
+        TemplateVersion tv = a.getOrder().getTemplateVersion();
+        School school = a.getOrder().getSchool();
+        AgencyCardSpecificationsResponse specs = tv != null
+                ? new AgencyCardSpecificationsResponse(
+                        tv.getCardWidthMm(),
+                        tv.getCardHeightMm(),
+                        tv.getBleedMarginMm(),
+                        tv.getTemplate() != null ? tv.getTemplate().getTemplateName() : "Standard ID Card",
+                        tv.getFrontDesignJson(),
+                        tv.getBackDesignJson(),
+                        school != null ? school.getSchoolName() : null,
+                        school != null ? school.getLogoFileId() : null
+                  )
+                : new AgencyCardSpecificationsResponse(
+                        new BigDecimal("85.60"),
+                        new BigDecimal("54.00"),
+                        new BigDecimal("3.00"),
+                        "Standard ID Card",
+                        null,
+                        null,
+                        school != null ? school.getSchoolName() : null,
+                        school != null ? school.getLogoFileId() : null
+                  );
+
+        List<OrderStudentItem> studentItems = orderStudentItemRepository.findByOrderId(a.getOrder().getId());
+        List<OrderStudentSnapshotResponse> students = studentItems.stream()
+                .map(s -> new OrderStudentSnapshotResponse(
+                        s.getId(),
+                        s.getStudent() != null ? s.getStudent().getId() : null,
+                        s.getAdmissionNumber(),
+                        s.getStudentName(),
+                        s.getFatherName(),
+                        s.getMotherName(),
+                        s.getDateOfBirth(),
+                        s.getGender(),
+                        s.getBloodGroup(),
+                        s.getClassName(),
+                        s.getSection(),
+                        s.getRollNumber(),
+                        s.getPhotoFileId()
+                ))
+                .toList();
+
         return new AdminAgencyAssignmentDetailResponse(
                 a.getId(),
                 a.getAssignmentNumber(),
@@ -513,7 +569,9 @@ public class AgencyJobService {
                 a.getRejectionReason(),
                 a.getNotes(),
                 totalQty,
-                jobItems
+                jobItems,
+                specs,
+                students
         );
     }
 
@@ -545,19 +603,47 @@ public class AgencyJobService {
                 .toList();
 
         TemplateVersion tv = a.getOrder().getTemplateVersion();
+        School school = a.getOrder().getSchool();
         AgencyCardSpecificationsResponse specs = tv != null
                 ? new AgencyCardSpecificationsResponse(
                         tv.getCardWidthMm(),
                         tv.getCardHeightMm(),
                         tv.getBleedMarginMm(),
-                        tv.getTemplate() != null ? tv.getTemplate().getTemplateName() : "Standard ID Card"
+                        tv.getTemplate() != null ? tv.getTemplate().getTemplateName() : "Standard ID Card",
+                        tv.getFrontDesignJson(),
+                        tv.getBackDesignJson(),
+                        school != null ? school.getSchoolName() : null,
+                        school != null ? school.getLogoFileId() : null
                   )
                 : new AgencyCardSpecificationsResponse(
                         new BigDecimal("85.60"),
                         new BigDecimal("54.00"),
                         new BigDecimal("3.00"),
-                        "Standard ID Card"
+                        "Standard ID Card",
+                        null,
+                        null,
+                        school != null ? school.getSchoolName() : null,
+                        school != null ? school.getLogoFileId() : null
                   );
+
+        List<OrderStudentItem> studentItems = orderStudentItemRepository.findByOrderId(a.getOrder().getId());
+        List<OrderStudentSnapshotResponse> students = studentItems.stream()
+                .map(s -> new OrderStudentSnapshotResponse(
+                        s.getId(),
+                        s.getStudent() != null ? s.getStudent().getId() : null,
+                        s.getAdmissionNumber(),
+                        s.getStudentName(),
+                        s.getFatherName(),
+                        s.getMotherName(),
+                        s.getDateOfBirth(),
+                        s.getGender(),
+                        s.getBloodGroup(),
+                        s.getClassName(),
+                        s.getSection(),
+                        s.getRollNumber(),
+                        s.getPhotoFileId()
+                ))
+                .toList();
 
         return new AgencyJobDetailResponse(
                 a.getId(),
@@ -570,7 +656,136 @@ public class AgencyJobService {
                 a.getNotes(),
                 a.getRejectionReason(),
                 specs,
-                items
+                items,
+                students
         );
+    }
+
+    private record JobRenderContext(CardTemplate template, TemplateVersion version, List<Student> students, School school, String session) {}
+
+    private JobRenderContext loadJobRenderContext(UUID jobId, UUID agencyId) {
+        AgencyAssignment assignment = agencyAssignmentRepository.findByIdAndAgencyId(jobId, agencyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Job assignment not found with ID: " + jobId));
+
+        PrintingOrder order = assignment.getOrder();
+        TemplateVersion version = order.getTemplateVersion();
+        if (version == null) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "Order does not have an associated template version");
+        }
+        CardTemplate template = version.getTemplate();
+        School school = order.getSchool();
+        String session = order.getAcademicSession();
+
+        List<OrderStudentItem> items = orderStudentItemRepository.findByOrderId(order.getId());
+        List<Student> students = new ArrayList<>();
+        for (OrderStudentItem item : items) {
+            Student s = item.getStudent();
+            if (s == null) {
+                s = new Student();
+                s.setAdmissionNumber(item.getAdmissionNumber());
+                s.setStudentName(item.getStudentName());
+                s.setClassName(item.getClassName());
+                s.setSection(item.getSection());
+                s.setRollNumber(item.getRollNumber());
+                s.setFatherName(item.getFatherName());
+                s.setMotherName(item.getMotherName());
+                s.setDateOfBirth(item.getDateOfBirth());
+                s.setBloodGroup(item.getBloodGroup());
+                s.setEmergencyContact(item.getEmergencyContact());
+                s.setAddress(item.getAddress());
+                s.setPhotoFileId(item.getPhotoFileId());
+                s.setSchool(school);
+            }
+            students.add(s);
+        }
+
+        return new JobRenderContext(template, version, students, school, session);
+    }
+
+    private Student extractStudentById(PrintingOrder order, UUID studentId, School school) {
+        List<OrderStudentItem> items = orderStudentItemRepository.findByOrderId(order.getId());
+        OrderStudentItem targetItem = items.stream()
+                .filter(it -> (it.getStudent() != null && it.getStudent().getId().equals(studentId)) || it.getId().equals(studentId))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found in this job"));
+
+        Student student = targetItem.getStudent();
+        if (student == null) {
+            student = new Student();
+            student.setAdmissionNumber(targetItem.getAdmissionNumber());
+            student.setStudentName(targetItem.getStudentName());
+            student.setClassName(targetItem.getClassName());
+            student.setSection(targetItem.getSection());
+            student.setRollNumber(targetItem.getRollNumber());
+            student.setFatherName(targetItem.getFatherName());
+            student.setMotherName(targetItem.getMotherName());
+            student.setDateOfBirth(targetItem.getDateOfBirth());
+            student.setBloodGroup(targetItem.getBloodGroup());
+            student.setEmergencyContact(targetItem.getEmergencyContact());
+            student.setAddress(targetItem.getAddress());
+            student.setPhotoFileId(targetItem.getPhotoFileId());
+            student.setSchool(school);
+        }
+        return student;
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobCardsPdf(UUID jobId, UUID agencyId) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        return cardPdfRenderingService.renderBatchPdf(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session());
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobA4SheetPdf(UUID jobId, UUID agencyId) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        return cardPdfRenderingService.renderA4SheetPdf(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session());
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobA4SheetImage(UUID jobId, UUID agencyId, String side) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        return cardPdfRenderingService.renderA4SheetImage(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session(), side);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobImagesZip(UUID jobId, UUID agencyId) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        return cardPdfRenderingService.renderJobImagesZip(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session());
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobSingleStudentPdf(UUID jobId, UUID studentId, UUID agencyId) {
+        AgencyAssignment assignment = agencyAssignmentRepository.findByIdAndAgencyId(jobId, agencyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Job assignment not found with ID: " + jobId));
+
+        PrintingOrder order = assignment.getOrder();
+        TemplateVersion version = order.getTemplateVersion();
+        if (version == null) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "Order does not have an associated template version");
+        }
+        CardTemplate template = version.getTemplate();
+        School school = order.getSchool();
+        String session = order.getAcademicSession();
+
+        Student student = extractStudentById(order, studentId, school);
+        return cardPdfRenderingService.renderCardPdf(template, version, student, school, session);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobSingleStudentImage(UUID jobId, UUID studentId, UUID agencyId, String side) {
+        AgencyAssignment assignment = agencyAssignmentRepository.findByIdAndAgencyId(jobId, agencyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Job assignment not found with ID: " + jobId));
+
+        PrintingOrder order = assignment.getOrder();
+        TemplateVersion version = order.getTemplateVersion();
+        if (version == null) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "Order does not have an associated template version");
+        }
+        CardTemplate template = version.getTemplate();
+        School school = order.getSchool();
+        String session = order.getAcademicSession();
+
+        Student student = extractStudentById(order, studentId, school);
+        return cardPdfRenderingService.renderSingleStudentImage(template, version, student, school, session, side);
     }
 }

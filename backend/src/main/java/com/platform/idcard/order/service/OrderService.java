@@ -11,6 +11,8 @@ import com.platform.idcard.order.repository.*;
 import com.platform.idcard.organization.entity.School;
 import com.platform.idcard.organization.repository.SchoolRepository;
 import com.platform.idcard.student.entity.Student;
+import com.platform.idcard.template.entity.CardTemplate;
+import com.platform.idcard.template.service.CardPdfRenderingService;
 import com.platform.idcard.student.repository.StudentRepository;
 import com.platform.idcard.template.entity.CardTemplate;
 import com.platform.idcard.template.entity.TemplateApprovalStatus;
@@ -43,6 +45,7 @@ public class OrderService {
     private final StudentRepository studentRepository;
     private final CardTemplateRepository cardTemplateRepository;
     private final TemplateVersionRepository templateVersionRepository;
+    private final CardPdfRenderingService cardPdfRenderingService;
 
     public OrderService(
             PrintingOrderRepository orderRepository,
@@ -53,7 +56,8 @@ public class OrderService {
             SchoolRepository schoolRepository,
             StudentRepository studentRepository,
             CardTemplateRepository cardTemplateRepository,
-            TemplateVersionRepository templateVersionRepository
+            TemplateVersionRepository templateVersionRepository,
+            CardPdfRenderingService cardPdfRenderingService
     ) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
@@ -64,6 +68,7 @@ public class OrderService {
         this.studentRepository = studentRepository;
         this.cardTemplateRepository = cardTemplateRepository;
         this.templateVersionRepository = templateVersionRepository;
+        this.cardPdfRenderingService = cardPdfRenderingService;
     }
 
     /**
@@ -475,6 +480,24 @@ public class OrderService {
     }
 
     /**
+     * Admin: Formally closes an order once production, delivery, and payments are complete.
+     */
+    @Transactional
+    public AdminOrderDetailResponse closeOrder(UUID orderId, UUID adminUserId) {
+        PrintingOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
+
+        if (!OrderStatus.DELIVERED.name().equalsIgnoreCase(order.getOrderStatus())) {
+            throw new ApiException(ErrorCode.INVALID_ACTION,
+                    "Order cannot be closed unless it has been delivered. Current status: " + order.getOrderStatus());
+        }
+
+        order.setOrderStatus(OrderStatus.CLOSED.name());
+        PrintingOrder saved = orderRepository.save(order);
+        return mapToAdminOrderDetail(saved);
+    }
+
+    /**
      * School: Approve quotation.
      * Named business action: QUOTATION_GENERATED / AWAITING_APPROVAL -> APPROVED.
      */
@@ -511,7 +534,7 @@ public class OrderService {
         List<OrderStudentSnapshotResponse> studentResponses = order.getStudentItems().stream()
                 .map(s -> new OrderStudentSnapshotResponse(
                         s.getId(),
-                        s.getStudent().getId(),
+                        s.getStudent() != null ? s.getStudent().getId() : null,
                         s.getAdmissionNumber(),
                         s.getStudentName(),
                         s.getFatherName(),
@@ -527,14 +550,16 @@ public class OrderService {
                 .toList();
 
         QuotationResponse qResp = order.getQuotation() != null ? mapToQuotationResponse(order.getQuotation()) : null;
+        TemplateVersion tv = order.getTemplateVersion();
+        School school = order.getSchool();
 
         return new SchoolOrderDetailResponse(
                 order.getId(),
                 order.getOrderNumber(),
                 order.getAcademicSession(),
-                order.getTemplateVersion().getId(),
-                order.getTemplateVersion().getTemplate().getTemplateName(),
-                order.getTemplateVersion().getVersionNumber(),
+                tv != null ? tv.getId() : null,
+                tv != null && tv.getTemplate() != null ? tv.getTemplate().getTemplateName() : "ID Card",
+                tv != null ? tv.getVersionNumber() : 1,
                 order.getTotalStudents(),
                 order.getTotalQuantity(),
                 order.getOrderStatus(),
@@ -549,7 +574,12 @@ public class OrderService {
                 order.getCreatedAt(),
                 itemResponses,
                 studentResponses,
-                qResp
+                qResp,
+                tv != null ? tv.getCardWidthMm() : null,
+                tv != null ? tv.getCardHeightMm() : null,
+                tv != null ? tv.getFrontDesignJson() : null,
+                tv != null ? tv.getBackDesignJson() : null,
+                school != null ? school.getLogoFileId() : null
         );
     }
 
@@ -561,7 +591,7 @@ public class OrderService {
         List<OrderStudentSnapshotResponse> studentResponses = order.getStudentItems().stream()
                 .map(s -> new OrderStudentSnapshotResponse(
                         s.getId(),
-                        s.getStudent().getId(),
+                        s.getStudent() != null ? s.getStudent().getId() : null,
                         s.getAdmissionNumber(),
                         s.getStudentName(),
                         s.getFatherName(),
@@ -577,17 +607,19 @@ public class OrderService {
                 .toList();
 
         QuotationResponse qResp = order.getQuotation() != null ? mapToQuotationResponse(order.getQuotation()) : null;
+        TemplateVersion tv = order.getTemplateVersion();
+        School school = order.getSchool();
 
         return new AdminOrderDetailResponse(
                 order.getId(),
                 order.getOrderNumber(),
-                order.getSchool().getId(),
-                order.getSchool().getSchoolName(),
-                order.getSchool().getSchoolCode(),
+                school != null ? school.getId() : null,
+                school != null ? school.getSchoolName() : null,
+                school != null ? school.getSchoolCode() : null,
                 order.getAcademicSession(),
-                order.getTemplateVersion().getId(),
-                order.getTemplateVersion().getTemplate().getTemplateName(),
-                order.getTemplateVersion().getVersionNumber(),
+                tv != null ? tv.getId() : null,
+                tv != null && tv.getTemplate() != null ? tv.getTemplate().getTemplateName() : "ID Card",
+                tv != null ? tv.getVersionNumber() : 1,
                 order.getTotalStudents(),
                 order.getTotalQuantity(),
                 order.getOrderStatus(),
@@ -604,7 +636,12 @@ public class OrderService {
                 order.getCreatedAt(),
                 itemResponses,
                 studentResponses,
-                qResp
+                qResp,
+                tv != null ? tv.getCardWidthMm() : null,
+                tv != null ? tv.getCardHeightMm() : null,
+                tv != null ? tv.getFrontDesignJson() : null,
+                tv != null ? tv.getBackDesignJson() : null,
+                school != null ? school.getLogoFileId() : null
         );
     }
 
@@ -651,5 +688,186 @@ public class OrderService {
             }
         }
         return "QUO-" + year + "-" + System.currentTimeMillis();
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderCardsPdf(UUID orderId) {
+        PrintingOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Printing order not found with ID: " + orderId));
+        return renderCardsPdfInternal(order);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderSchoolOrderCardsPdf(UUID orderId, UUID schoolId) {
+        PrintingOrder order = orderRepository.findByIdAndSchoolId(orderId, schoolId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found or access denied"));
+        return renderCardsPdfInternal(order);
+    }
+
+    private byte[] renderCardsPdfInternal(PrintingOrder order) {
+        OrderRenderContext ctx = loadOrderRenderContext(order);
+        return cardPdfRenderingService.renderBatchPdf(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session());
+    }
+
+    private record OrderRenderContext(
+            CardTemplate template,
+            TemplateVersion version,
+            List<Student> students,
+            School school,
+            String session
+    ) {}
+
+    private OrderRenderContext loadOrderRenderContext(PrintingOrder order) {
+        TemplateVersion version = order.getTemplateVersion();
+        if (version == null) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "Order does not have an associated template version");
+        }
+        CardTemplate template = version.getTemplate();
+        School school = order.getSchool();
+        String session = order.getAcademicSession();
+
+        List<OrderStudentItem> items = orderStudentItemRepository.findByOrderId(order.getId());
+        List<Student> students = new ArrayList<>();
+        for (OrderStudentItem item : items) {
+            Student s = item.getStudent();
+            if (s == null) {
+                s = new Student();
+                s.setAdmissionNumber(item.getAdmissionNumber());
+                s.setStudentName(item.getStudentName());
+                s.setClassName(item.getClassName());
+                s.setSection(item.getSection());
+                s.setRollNumber(item.getRollNumber());
+                s.setFatherName(item.getFatherName());
+                s.setMotherName(item.getMotherName());
+                s.setDateOfBirth(item.getDateOfBirth());
+                s.setBloodGroup(item.getBloodGroup());
+                s.setEmergencyContact(item.getEmergencyContact());
+                s.setAddress(item.getAddress());
+                s.setPhotoFileId(item.getPhotoFileId());
+                s.setSchool(school);
+            }
+            students.add(s);
+        }
+        return new OrderRenderContext(template, version, students, school, session);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderA4SheetPdf(UUID orderId) {
+        PrintingOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
+        OrderRenderContext ctx = loadOrderRenderContext(order);
+        return cardPdfRenderingService.renderA4SheetPdf(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session());
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderA4SheetImage(UUID orderId, String side) {
+        PrintingOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
+        OrderRenderContext ctx = loadOrderRenderContext(order);
+        return cardPdfRenderingService.renderA4SheetImage(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session(), side);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderImagesZip(UUID orderId) {
+        PrintingOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
+        OrderRenderContext ctx = loadOrderRenderContext(order);
+        return cardPdfRenderingService.renderJobImagesZip(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session());
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderSingleStudentImage(UUID orderId, UUID studentId, String side) {
+        PrintingOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
+        TemplateVersion version = order.getTemplateVersion();
+        if (version == null) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "Order does not have an associated template version");
+        }
+        CardTemplate template = version.getTemplate();
+        School school = order.getSchool();
+        String session = order.getAcademicSession();
+
+        List<OrderStudentItem> items = orderStudentItemRepository.findByOrderId(order.getId());
+        OrderStudentItem targetItem = items.stream()
+                .filter(it -> (it.getStudent() != null && it.getStudent().getId().equals(studentId)) || it.getId().equals(studentId))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found in this order"));
+
+        Student student = targetItem.getStudent();
+        if (student == null) {
+            student = new Student();
+            student.setAdmissionNumber(targetItem.getAdmissionNumber());
+            student.setStudentName(targetItem.getStudentName());
+            student.setClassName(targetItem.getClassName());
+            student.setSection(targetItem.getSection());
+            student.setRollNumber(targetItem.getRollNumber());
+            student.setFatherName(targetItem.getFatherName());
+            student.setMotherName(targetItem.getMotherName());
+            student.setDateOfBirth(targetItem.getDateOfBirth());
+            student.setBloodGroup(targetItem.getBloodGroup());
+            student.setEmergencyContact(targetItem.getEmergencyContact());
+            student.setAddress(targetItem.getAddress());
+            student.setPhotoFileId(targetItem.getPhotoFileId());
+            student.setSchool(school);
+        }
+
+        return cardPdfRenderingService.renderSingleStudentImage(template, version, student, school, session, side);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderSchoolOrderSingleStudentImage(UUID orderId, UUID studentId, UUID schoolId, String side) {
+        PrintingOrder order = orderRepository.findByIdAndSchoolId(orderId, schoolId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found or access denied"));
+        return renderOrderSingleStudentImage(order.getId(), studentId, side);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderSingleStudentPdf(UUID orderId, UUID studentId) {
+        PrintingOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Printing order not found with ID: " + orderId));
+        return renderSingleStudentPdfInternal(order, studentId);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderSchoolOrderSingleStudentPdf(UUID orderId, UUID studentId, UUID schoolId) {
+        PrintingOrder order = orderRepository.findByIdAndSchoolId(orderId, schoolId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found or access denied"));
+        return renderSingleStudentPdfInternal(order, studentId);
+    }
+
+    private byte[] renderSingleStudentPdfInternal(PrintingOrder order, UUID studentId) {
+        TemplateVersion version = order.getTemplateVersion();
+        if (version == null) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "Order does not have an associated template version");
+        }
+        CardTemplate template = version.getTemplate();
+        School school = order.getSchool();
+        String session = order.getAcademicSession();
+
+        List<OrderStudentItem> items = orderStudentItemRepository.findByOrderId(order.getId());
+        OrderStudentItem targetItem = items.stream()
+                .filter(it -> (it.getStudent() != null && it.getStudent().getId().equals(studentId)) || it.getId().equals(studentId))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found in this order"));
+
+        Student student = targetItem.getStudent();
+        if (student == null) {
+            student = new Student();
+            student.setAdmissionNumber(targetItem.getAdmissionNumber());
+            student.setStudentName(targetItem.getStudentName());
+            student.setClassName(targetItem.getClassName());
+            student.setSection(targetItem.getSection());
+            student.setRollNumber(targetItem.getRollNumber());
+            student.setFatherName(targetItem.getFatherName());
+            student.setMotherName(targetItem.getMotherName());
+            student.setDateOfBirth(targetItem.getDateOfBirth());
+            student.setBloodGroup(targetItem.getBloodGroup());
+            student.setEmergencyContact(targetItem.getEmergencyContact());
+            student.setAddress(targetItem.getAddress());
+            student.setPhotoFileId(targetItem.getPhotoFileId());
+            student.setSchool(school);
+        }
+
+        return cardPdfRenderingService.renderCardPdf(template, version, student, school, session);
     }
 }

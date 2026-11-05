@@ -6,5 +6,9 @@ public record AgencyCardSpecificationsResponse(
         BigDecimal widthMm,
         BigDecimal heightMm,
         BigDecimal bleedMm,
-        String templateName
+        String templateName,
+        String frontDesignJson,
+        String backDesignJson,
+        String schoolName,
+        String schoolLogoFileId
 ) {}

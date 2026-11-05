@@ -14,8 +14,15 @@ import {
   Hash,
   Palette,
   Sparkles,
+  QrCode,
+  Image,
 } from 'lucide-react';
-import { PLACEHOLDERS, FONT_FAMILIES } from './templatesConstants';
+import {
+  PLACEHOLDERS,
+  FONT_FAMILIES,
+  PHOTO_SHAPES,
+  QR_DATA_PRESETS,
+} from './templatesConstants';
 
 const COLOR_SWATCHES = [
   '#000000',
@@ -24,6 +31,7 @@ const COLOR_SWATCHES = [
   '#1d4ed8',
   '#0284c7',
   '#059669',
+  '#881337',
   '#b91c1c',
   '#d97706',
   '#ffffff',
@@ -37,29 +45,74 @@ export default function PropertyInspector({
   onDuplicateElement,
   cardWidthMm = 85.6,
   cardHeightMm = 54.0,
+  canvasBgColor = '#ffffff',
+  onUpdateCanvasBgColor,
 }) {
   const [activePlaceholderCategory, setActivePlaceholderCategory] = useState('All');
 
   if (!selectedElement) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
-        <Sliders className="w-8 h-8 text-slate-300 mb-2 stroke-[1.5]" />
-        <h4 className="text-xs font-semibold text-slate-700">No Element Selected</h4>
-        <p className="text-[11px] text-slate-400 mt-1 max-w-[200px]">
-          Click any text, photo, shape, or barcode on the card canvas to customize its coordinates, font family, size, and styling.
-        </p>
-        <div className="mt-4 pt-3 border-t border-slate-200 w-full text-[11px] text-slate-500 space-y-1">
+      <div className="h-full flex flex-col justify-between p-4 bg-slate-50/50 rounded-lg border border-dashed border-slate-200 text-xs">
+        <div className="flex flex-col items-center justify-center text-center pt-6">
+          <Sliders className="w-8 h-8 text-slate-300 mb-2 stroke-[1.5]" />
+          <h4 className="text-xs font-semibold text-slate-700">Canvas Settings</h4>
+          <p className="text-[11px] text-slate-400 mt-1 max-w-[220px]">
+            Click any element on the card to edit its properties, or customize the background color and canvas dimensions below.
+          </p>
+        </div>
+
+        {/* Canvas Background Color Adjustment */}
+        {onUpdateCanvasBgColor && (
+          <div className="p-3 bg-white rounded-lg border border-slate-200/80 shadow-xs space-y-2.5 my-4">
+            <h5 className="font-semibold text-slate-700 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+              <Palette className="w-3.5 h-3.5 text-indigo-600" />
+              Card Background Color
+            </h5>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={canvasBgColor || '#ffffff'}
+                onChange={(e) => onUpdateCanvasBgColor(e.target.value)}
+                className="w-7 h-7 p-0 border border-slate-300 rounded cursor-pointer shrink-0"
+              />
+              <input
+                type="text"
+                value={canvasBgColor || '#ffffff'}
+                onChange={(e) => onUpdateCanvasBgColor(e.target.value)}
+                className="flex-1 px-2 py-1 border border-slate-200 rounded text-xs font-mono"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1 pt-1">
+              {['#ffffff', '#f8fafc', '#f1f5f9', '#f0fdf4', '#eff6ff', '#fffbeb', '#fef2f2', '#1e3a8a', '#0f172a'].map((col) => (
+                <button
+                  key={col}
+                  type="button"
+                  onClick={() => onUpdateCanvasBgColor(col)}
+                  style={{ backgroundColor: col }}
+                  className={`w-4 h-4 rounded-full border ${canvasBgColor === col ? 'ring-2 ring-indigo-500 ring-offset-1 border-white' : 'border-slate-300'}`}
+                  title={col}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="pt-3 border-t border-slate-200 w-full text-[11px] text-slate-500 space-y-1">
           <div className="flex justify-between">
-            <span>Card Width:</span>
-            <strong className="text-slate-700">{cardWidthMm} mm</strong>
+            <span>Standard:</span>
+            <strong className="text-slate-700">CR-80 Format</strong>
           </div>
           <div className="flex justify-between">
-            <span>Card Height:</span>
-            <strong className="text-slate-700">{cardHeightMm} mm</strong>
+            <span>Dimensions:</span>
+            <strong className="text-slate-700">{cardWidthMm} × {cardHeightMm} mm</strong>
           </div>
           <div className="flex justify-between">
-            <span>Resolution:</span>
-            <strong className="text-slate-700">300 DPI Vector Output</strong>
+            <span>Bleed Margin:</span>
+            <strong className="text-slate-700">3.0 mm Safe Margin</strong>
+          </div>
+          <div className="flex justify-between">
+            <span>Print Resolution:</span>
+            <strong className="text-slate-700">300 DPI Vector High-Res</strong>
           </div>
         </div>
       </div>
@@ -110,7 +163,7 @@ export default function PropertyInspector({
     handleChange('textTransform', isUppercase ? 'none' : 'uppercase');
   };
 
-  const categories = ['All', 'Student', 'School', 'Academic', 'Contact'];
+  const categories = ['All', 'Student', 'Academic', 'Medical', 'Guardian', 'Contact', 'School'];
   const filteredPlaceholders =
     activePlaceholderCategory === 'All'
       ? PLACEHOLDERS
@@ -118,55 +171,47 @@ export default function PropertyInspector({
 
   return (
     <div className="space-y-4 text-xs">
-      {/* Header with Type & Actions */}
-      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-        <div className="flex items-center gap-1.5">
-          <span className="font-semibold text-slate-900 capitalize text-sm">
-            {selectedElement.type === 'rect'
-              ? 'Shape / Banner'
-              : selectedElement.type === 'qrcode'
-              ? 'QR Code'
-              : selectedElement.type === 'barcode'
-              ? 'Barcode'
-              : selectedElement.type === 'signature'
-              ? 'Principal Signature'
-              : selectedElement.type === 'image'
-              ? selectedElement.label || 'Image Box'
-              : 'Text Element'}
+      {/* Top Header: Element Identification & Quick Action Buttons */}
+      <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div>
+          <span className="font-bold uppercase tracking-wider text-[11px] text-slate-800 flex items-center gap-1">
+            <Sliders className="w-3.5 h-3.5 text-indigo-600" />
+            {selectedElement.type.toUpperCase()} ELEMENT
           </span>
-          <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">
-            {selectedElement.id.slice(-6)}
+          <span className="text-[10px] text-slate-400 font-mono block">
+            ID: {selectedElement.id}
           </span>
         </div>
+
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => onDuplicateElement(selectedElement.id)}
-            title="Duplicate element"
-            className="p-1 rounded text-slate-500 hover:text-indigo-600 hover:bg-slate-100"
+            className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+            title="Duplicate Element"
           >
-            <Copy className="w-3.5 h-3.5" />
+            <Copy className="w-4 h-4" />
           </button>
           <button
             type="button"
             onClick={() => onDeleteElement(selectedElement.id)}
-            title="Delete element"
-            className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-50"
+            className="p-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+            title="Delete Element"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Coordinates & Dimensions (mm) */}
-      <div>
-        <h5 className="font-semibold text-slate-700 uppercase tracking-wider text-[10px] mb-2 flex items-center gap-1">
-          <Hash className="w-3 h-3 text-indigo-500" />
-          <span>Position & Size (mm)</span>
+      {/* Geometry & Coordinates Panel (mm) */}
+      <div className="space-y-2">
+        <h5 className="font-semibold text-slate-700 uppercase tracking-wider text-[10px] flex items-center gap-1">
+          <Hash className="w-3 h-3" /> Position & Size (mm)
         </h5>
+
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="text-[10px] text-slate-500 font-medium block mb-1">X Position</label>
+            <label className="text-[10px] text-slate-500 font-medium block mb-0.5">X Position</label>
             <input
               type="number"
               step="0.5"
@@ -174,11 +219,12 @@ export default function PropertyInspector({
               max={cardWidthMm}
               value={selectedElement.x ?? 0}
               onChange={(e) => handleNumberChange('x', e.target.value)}
-              className="w-full px-2 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full px-2 py-1 border border-slate-200 rounded text-xs font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none"
             />
           </div>
+
           <div>
-            <label className="text-[10px] text-slate-500 font-medium block mb-1">Y Position</label>
+            <label className="text-[10px] text-slate-500 font-medium block mb-0.5">Y Position</label>
             <input
               type="number"
               step="0.5"
@@ -186,45 +232,46 @@ export default function PropertyInspector({
               max={cardHeightMm}
               value={selectedElement.y ?? 0}
               onChange={(e) => handleNumberChange('y', e.target.value)}
-              className="w-full px-2 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full px-2 py-1 border border-slate-200 rounded text-xs font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none"
             />
           </div>
+
           <div>
-            <label className="text-[10px] text-slate-500 font-medium block mb-1">Width (mm)</label>
+            <label className="text-[10px] text-slate-500 font-medium block mb-0.5">Width</label>
             <input
               type="number"
               step="0.5"
-              min="1"
+              min="2"
               max={cardWidthMm}
-              value={selectedElement.width ?? 10}
+              value={selectedElement.width ?? 20}
               onChange={(e) => handleNumberChange('width', e.target.value)}
-              className="w-full px-2 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full px-2 py-1 border border-slate-200 rounded text-xs font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none"
             />
           </div>
+
           <div>
-            <label className="text-[10px] text-slate-500 font-medium block mb-1">Height (mm)</label>
+            <label className="text-[10px] text-slate-500 font-medium block mb-0.5">Height</label>
             <input
               type="number"
               step="0.5"
-              min="1"
+              min="2"
               max={cardHeightMm}
-              value={selectedElement.height ?? 5}
+              value={selectedElement.height ?? 10}
               onChange={(e) => handleNumberChange('height', e.target.value)}
-              className="w-full px-2 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full px-2 py-1 border border-slate-200 rounded text-xs font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none"
             />
           </div>
         </div>
       </div>
 
-      {/* RICH TYPOGRAPHY CONTROLS FOR TEXT ELEMENTS */}
+      {/* Typography Styling Panel (Text Elements) */}
       {selectedElement.type === 'text' && (
         <div className="space-y-3 pt-2 border-t border-slate-100">
           <h5 className="font-semibold text-slate-700 uppercase tracking-wider text-[10px] flex items-center gap-1">
-            <Type className="w-3 h-3 text-indigo-500" />
-            <span>Typography & Styling</span>
+            <Type className="w-3 h-3" /> Typography & Colors
           </h5>
 
-          {/* Font Family Selection */}
+          {/* Font Family */}
           <div>
             <label className="text-[10px] text-slate-500 font-medium block mb-1">Font Family</label>
             <select
@@ -270,86 +317,46 @@ export default function PropertyInspector({
             </div>
           </div>
 
-          {/* Font Style Toggles (Bold, Italic, Underline, Uppercase) */}
+          {/* Font Style Toggles */}
           <div>
             <label className="text-[10px] text-slate-500 font-medium block mb-1">Format & Transform</label>
             <div className="grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-md">
               <button
                 type="button"
                 onClick={toggleBold}
-                title="Bold (Toggle)"
                 className={`py-1 rounded flex items-center justify-center font-bold text-xs transition-colors ${
                   isBold ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:bg-slate-200'
                 }`}
               >
                 <Bold className="w-3.5 h-3.5" />
               </button>
-
               <button
                 type="button"
                 onClick={toggleItalic}
-                title="Italic (Toggle)"
                 className={`py-1 rounded flex items-center justify-center italic text-xs transition-colors ${
                   isItalic ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:bg-slate-200'
                 }`}
               >
                 <Italic className="w-3.5 h-3.5" />
               </button>
-
               <button
                 type="button"
                 onClick={toggleUnderline}
-                title="Underline (Toggle)"
                 className={`py-1 rounded flex items-center justify-center text-xs transition-colors ${
                   isUnderline ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:bg-slate-200'
                 }`}
               >
                 <Underline className="w-3.5 h-3.5" />
               </button>
-
               <button
                 type="button"
                 onClick={toggleUppercase}
-                title="Uppercase / All Caps"
                 className={`py-1 rounded flex items-center justify-center font-mono font-bold text-[10px] transition-colors ${
                   isUppercase ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:bg-slate-200'
                 }`}
               >
                 TT
               </button>
-            </div>
-          </div>
-
-          {/* Font Weight Dropdown */}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[10px] text-slate-500 font-medium block mb-1">Weight</label>
-              <select
-                value={selectedElement.fontWeight || (isBold ? 'bold' : 'normal')}
-                onChange={(e) => handleChange('fontWeight', e.target.value)}
-                className="w-full px-2 py-1 border border-slate-200 rounded text-xs bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-              >
-                <option value="normal">Normal (400)</option>
-                <option value="medium">Medium (500)</option>
-                <option value="semibold">Semibold (600)</option>
-                <option value="bold">Bold (700)</option>
-                <option value="800">Extra Bold (800)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[10px] text-slate-500 font-medium block mb-1">Letter Spacing</label>
-              <select
-                value={selectedElement.letterSpacing ?? 0}
-                onChange={(e) => handleNumberChange('letterSpacing', e.target.value)}
-                className="w-full px-2 py-1 border border-slate-200 rounded text-xs bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-              >
-                <option value="-0.5">Tight (-0.5px)</option>
-                <option value="0">Normal (0)</option>
-                <option value="0.5">Wide (+0.5px)</option>
-                <option value="1">Wider (+1.0px)</option>
-                <option value="2">Expanded (+2.0px)</option>
-              </select>
             </div>
           </div>
 
@@ -396,55 +403,6 @@ export default function PropertyInspector({
                 className="flex-1 px-2 py-1 border border-slate-200 rounded text-xs font-mono"
               />
             </div>
-            <div className="mt-1.5 flex gap-1">
-              {COLOR_SWATCHES.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  onClick={() => handleChange('color', color)}
-                  style={{ backgroundColor: color }}
-                  className="w-4 h-4 rounded-full border border-slate-300 hover:scale-110 transition-transform"
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Optional Text Background & Pill Badge Styling */}
-          <div className="pt-2 border-t border-slate-100 space-y-2">
-            <h6 className="font-semibold text-slate-600 text-[10px]">Text Background / Pill Badge</h6>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] text-slate-500 font-medium block mb-1">Fill Color</label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="color"
-                    value={selectedElement.backgroundColor || '#ffffff'}
-                    onChange={(e) => handleChange('backgroundColor', e.target.value)}
-                    className="w-6 h-6 p-0 border border-slate-300 rounded cursor-pointer"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleChange('backgroundColor', 'transparent')}
-                    className="text-[9px] px-1.5 py-0.5 border border-slate-200 rounded bg-slate-50 hover:bg-slate-100"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] text-slate-500 font-medium block mb-1">Corner Radius (mm)</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="10"
-                  value={selectedElement.borderRadius || 0}
-                  onChange={(e) => handleNumberChange('borderRadius', e.target.value)}
-                  className="w-full px-2 py-1 border border-slate-200 rounded text-xs"
-                />
-              </div>
-            </div>
           </div>
 
           {/* Content & Dynamic Data Binding */}
@@ -454,13 +412,15 @@ export default function PropertyInspector({
             </label>
             <textarea
               rows={2}
-              value={selectedElement.content || ''}
-              onChange={(e) => handleChange('content', e.target.value)}
+              value={selectedElement.content || selectedElement.text || ''}
+              onChange={(e) => {
+                handleChange('content', e.target.value);
+                handleChange('text', e.target.value);
+              }}
               className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none"
               placeholder="Enter text or placeholders like {{student_name}}"
             />
 
-            {/* Categorized placeholder chips */}
             <div>
               <div className="flex gap-1 mb-1.5 overflow-x-auto pb-0.5">
                 {categories.map((cat) => (
@@ -484,7 +444,11 @@ export default function PropertyInspector({
                   <button
                     key={p.key}
                     type="button"
-                    onClick={() => handleChange('content', (selectedElement.content || '') + ' ' + p.key)}
+                    onClick={() => {
+                      const cur = selectedElement.content || selectedElement.text || '';
+                      handleChange('content', (cur ? cur + ' ' : '') + p.key);
+                      handleChange('text', (cur ? cur + ' ' : '') + p.key);
+                    }}
                     className="text-[9px] bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 px-1.5 py-0.5 rounded font-mono shadow-2xs"
                     title={p.label}
                   >
@@ -544,7 +508,7 @@ export default function PropertyInspector({
                 type="number"
                 step="0.5"
                 min="0"
-                max="10"
+                max="20"
                 value={selectedElement.borderRadius || 0}
                 onChange={(e) => handleNumberChange('borderRadius', e.target.value)}
                 className="w-full px-2 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
@@ -567,12 +531,50 @@ export default function PropertyInspector({
         </div>
       )}
 
-      {/* Frame Styling for Images & Signature */}
-      {(selectedElement.type === 'image' || selectedElement.type === 'signature') && (
+      {/* Frame Styling for Images (Photo, Logo) with Photo Shapes */}
+      {selectedElement.type === 'image' && (
         <div className="space-y-3 pt-2 border-t border-slate-100">
-          <h5 className="font-semibold text-slate-700 uppercase tracking-wider text-[10px]">
-            Frame & Border
+          <h5 className="font-semibold text-slate-700 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+            <Image className="w-3.5 h-3.5 text-indigo-600" />
+            Photo Frame & Shapes
           </h5>
+
+          <div>
+            <label className="text-[10px] text-slate-500 font-medium block mb-1.5">
+              Photo Shape
+            </label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {PHOTO_SHAPES.map((ps) => {
+                const currentShape = selectedElement.shape || selectedElement.photoShape || 'rounded';
+                const isSelected = currentShape === ps.value;
+                return (
+                  <button
+                    key={ps.value}
+                    type="button"
+                    onClick={() => {
+                      handleChange('shape', ps.value);
+                      handleChange('photoShape', ps.value);
+                      if (ps.value === 'square') {
+                        handleChange('borderRadius', 0);
+                      } else if (ps.value === 'circle' || ps.value === 'pill') {
+                        handleChange('borderRadius', 20);
+                      } else {
+                        handleChange('borderRadius', 2.5);
+                      }
+                    }}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium border text-left transition-all ${
+                      isSelected
+                        ? 'bg-indigo-50 border-indigo-500 text-indigo-700 font-semibold shadow-2xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {ps.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-slate-500 font-medium block mb-1">
@@ -581,25 +583,137 @@ export default function PropertyInspector({
               <input
                 type="number"
                 min="0"
-                max="4"
-                value={selectedElement.borderWidth || 1}
+                max="6"
+                value={selectedElement.borderWidth !== undefined ? selectedElement.borderWidth : 1}
                 onChange={(e) => handleNumberChange('borderWidth', e.target.value)}
                 className="w-full px-2 py-1 border border-slate-200 rounded text-xs"
               />
             </div>
             <div>
               <label className="text-[10px] text-slate-500 font-medium block mb-1">
-                Border Radius (mm)
+                Border Color
               </label>
-              <input
-                type="number"
-                min="0"
-                max="10"
-                value={selectedElement.borderRadius || 2}
-                onChange={(e) => handleNumberChange('borderRadius', e.target.value)}
-                className="w-full px-2 py-1 border border-slate-200 rounded text-xs"
-              />
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="color"
+                  value={selectedElement.borderColor || '#cbd5e1'}
+                  onChange={(e) => handleChange('borderColor', e.target.value)}
+                  className="w-7 h-7 p-0 border border-slate-300 rounded cursor-pointer"
+                />
+                <input
+                  type="text"
+                  value={selectedElement.borderColor || '#cbd5e1'}
+                  onChange={(e) => handleChange('borderColor', e.target.value)}
+                  className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs font-mono"
+                />
+              </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Data Source Configuration */}
+      {(selectedElement.type === 'qrcode' || selectedElement.type === 'qr') && (
+        <div className="space-y-3 pt-2 border-t border-slate-100">
+          <h5 className="font-semibold text-slate-700 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+            <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+            QR Code Real Data Feed
+          </h5>
+
+          <div>
+            <label className="text-[10px] text-slate-500 font-medium block mb-1">
+              Select Data Template
+            </label>
+            <select
+              value={selectedElement.dataFeed || 'vcard'}
+              onChange={(e) => {
+                const presetId = e.target.value;
+                handleChange('dataFeed', presetId);
+                const p = QR_DATA_PRESETS.find((x) => x.id === presetId);
+                if (p && p.template) {
+                  handleChange('content', p.template);
+                  handleChange('data', p.template);
+                }
+              }}
+              className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-white focus:ring-1 focus:ring-indigo-500"
+            >
+              {QR_DATA_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-slate-500 font-medium block mb-1">
+              Encoded Content (Supports Dynamic Placeholders)
+            </label>
+            <textarea
+              rows={4}
+              value={selectedElement.content || selectedElement.data || ''}
+              onChange={(e) => {
+                handleChange('content', e.target.value);
+                handleChange('data', e.target.value);
+              }}
+              className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs font-mono focus:ring-1 focus:ring-indigo-500 resize-none"
+              placeholder="e.g. BEGIN:VCARD... or {{admission_number}}"
+            />
+          </div>
+
+          <div>
+            <span className="text-[10px] text-slate-500 font-medium block mb-1">
+              Quick Add Detail Tags:
+            </span>
+            <div className="flex flex-wrap gap-1">
+              {[
+                '{{student_name}}',
+                '{{admission_number}}',
+                '{{class}}',
+                '{{section}}',
+                '{{roll_number}}',
+                '{{blood_group}}',
+                '{{date_of_birth}}',
+                '{{emergency_contact}}',
+                '{{school_name}}',
+              ].map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => {
+                    const cur = selectedElement.content || selectedElement.data || '';
+                    handleChange('content', (cur ? cur + ' ' : '') + tag);
+                    handleChange('data', (cur ? cur + ' ' : '') + tag);
+                  }}
+                  className="text-[9px] bg-indigo-50 border border-indigo-200 text-indigo-700 px-1.5 py-0.5 rounded font-mono hover:bg-indigo-100"
+                >
+                  +{tag}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Signature Box Settings */}
+      {selectedElement.type === 'signature' && (
+        <div className="space-y-3 pt-2 border-t border-slate-100">
+          <h5 className="font-semibold text-slate-700 uppercase tracking-wider text-[10px]">
+            Signature Label
+          </h5>
+          <div>
+            <label className="text-[10px] text-slate-500 font-medium block mb-1">
+              Signatory Title / Name
+            </label>
+            <input
+              type="text"
+              value={selectedElement.label || selectedElement.content || 'Principal Signature'}
+              onChange={(e) => {
+                handleChange('label', e.target.value);
+                handleChange('content', e.target.value);
+              }}
+              className="w-full px-2 py-1 border border-slate-200 rounded text-xs"
+            />
           </div>
         </div>
       )}

@@ -10,7 +10,9 @@ import com.platform.idcard.order.service.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -79,5 +81,27 @@ public class SchoolOrderController {
     public ResponseEntity<ApiResponse<SchoolOrderDetailResponse>> cancelOrder(@PathVariable UUID id) {
         UUID schoolId = SecurityUtils.getRequiredSchoolId();
         return ResponseEntity.ok(ApiResponse.ok(orderService.cancelOrder(id, schoolId)));
+    }
+
+    @GetMapping("/{id}/print-pdf")
+    @Operation(summary = "Download student ID cards PDF proof", description = "Generates high-resolution multi-page PDF proof for school review")
+    public ResponseEntity<byte[]> downloadOrderPrintPdf(@PathVariable UUID id) {
+        UUID schoolId = SecurityUtils.getRequiredSchoolId();
+        byte[] pdfBytes = orderService.renderSchoolOrderCardsPdf(id, schoolId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"order_cards_" + id + ".pdf\"")
+                .body(pdfBytes);
+    }
+
+    @GetMapping("/{id}/students/{studentId}/print-pdf")
+    @Operation(summary = "Download single student ID card PDF", description = "Generates single student ID card PDF proof for review")
+    public ResponseEntity<byte[]> downloadOrderStudentPrintPdf(@PathVariable UUID id, @PathVariable UUID studentId) {
+        UUID schoolId = SecurityUtils.getRequiredSchoolId();
+        byte[] pdfBytes = orderService.renderSchoolOrderSingleStudentPdf(id, studentId, schoolId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"card_" + studentId + ".pdf\"")
+                .body(pdfBytes);
     }
 }

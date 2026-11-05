@@ -1136,6 +1136,362 @@
 
 ---
 
+## Step 15 Log: Full Order Fulfillment, Multi-Page Batch PDF Generation, End-to-End Delivery & Financial Settlements, and Order Closure Lifecycle
+
+### What Was Built
+1. **Multi-Page High-Resolution Batch Card PDF Generation Engine (`CardPdfRenderingService.java`):**
+   - Implemented `renderBatchPdf(CardTemplate, TemplateVersion, List<Student>, School, String)` using Apache PDFBox 3.0.2.
+   - Generates two print-ready pages per student (Page 1 = Front side, Page 2 = Back side) with 300 DPI high-resolution student portraits, institutional crests, and dynamic ZXing barcodes / QR codes.
+   - Connected batch generation to all three portals with strict role isolation:
+     - Printing Agency: `GET /api/v1/agency/jobs/{id}/print-pdf` (`AgencyJobController.java` & `AgencyJobService.java`).
+     - School: `GET /api/v1/school/orders/{id}/print-pdf` (`SchoolOrderController.java` & `OrderService.java`).
+     - Super Admin: `GET /api/v1/admin/orders/{id}/print-pdf` (`AdminOrderController.java` & `OrderService.java`).
+   - Added instant download actions to `AgencyJobDetailPage.jsx` ("Download Print-Ready PDF"), `AdminOrderDetailPage.jsx` ("Download Print PDF"), and `OrderDetailPage.jsx` ("Download Cards Proof PDF").
+
+2. **Consignment Dispatch & Multi-Model Logistics Unwrapping (`AgencyDispatchPage.jsx` & `AdminDeliveryPage.jsx`):**
+   - Fixed 3-level data unwrapping bug (`res.data?.data?.data`) using unified `extractArray` and `extractPagination` utilities from `services/responseUtils.js`.
+   - Enabled agencies to select active jobs across production statuses, enter courier details and tracking IDs, and record dispatches (`POST /api/v1/agency/jobs/{id}/dispatch`).
+   - Automatically transitions parent orders to `DISPATCHED`.
+   - Admin logistics hub supports global transit supervision, Model B central hub intake, and secondary school dispatch.
+
+3. **School Delivery Receipt & Recipient Acknowledgment (`OrderDetailPage.jsx`):**
+   - Wired `ConfirmDeliveryModal.jsx` to `POST /api/v1/school/orders/{id}/confirm-delivery`.
+   - Validates multi-tenant institutional ownership, records receiving officer credentials and package condition notes, and transitions order status to `DELIVERED`.
+
+4. **Tax Invoicing & Financial Settlement Ledgers (`SchoolFinancePage.jsx`, `AdminFinancePage.jsx`, `AgencySettlementsPage.jsx`):**
+   - Fixed data unwrapping across all finance ledgers.
+   - Admin Tax Invoicing: `POST /api/v1/admin/finance/orders/{id}/invoices` computes 18% GST and issues `INV-YYYY-XXXX`.
+   - School Payment Recording: `POST /api/v1/school/finance/orders/{id}/payments` records advance/milestone payments and transitions invoices to `PARTIALLY_PAID` or `PAID`.
+   - Agency Payout Settlements: `POST /api/v1/admin/finance/assignments/{id}/settlement` calculates agreed printing rates minus any quality defect deductions, generating `SET-YYYY-XXXX`.
+   - Payout Disbursement: `POST /api/v1/admin/finance/settlements/{id}/pay` executes disbursement recording UTR reference numbers and moves settlement to `SETTLED`.
+
+5. **Formal Order Closure Lifecycle (`closeOrder`):**
+   - Implemented `closeOrder(UUID orderId, UUID adminUserId)` in `OrderService.java`.
+   - Added `POST /api/v1/admin/orders/{id}/close` in `AdminOrderController.java`.
+   - Added "Close Order" action button in `AdminOrderDetailPage.jsx` when order is `DELIVERED`.
+   - Admin closed delivery record `DEL-2026-0001` and formally closed order `ORD-2026-7E047A59` into `CLOSED` status.
+
+### How It Was Verified
+- **Backend Test Suite:** Executed target integration tests — **7/7 tests passed** with 0 failures:
+  - `DeliveryIntegrationTest` (2 tests): Model A direct and Model B hub delivery workflows.
+  - `FinanceIntegrationTest` (1 test): Complete invoicing, payment, and agency settlement lifecycle.
+  - `OrderIntegrationTest` (4 tests): Draft snapshots, cross-tenant isolation, quotation approval, and student updates.
+- **Frontend Production Build:** Executed `npm --prefix frontend run build` — `vite build` completed cleanly in 5.59s with 0 errors.
+- **End-to-End Live Workflow Execution via Authenticated APIs:**
+  1. Agency dispatched `JOB-2026-0001` via BlueDart -> created `DSP-2026-0001`, Order `ORD-2026-7E047A59` transitioned to `DISPATCHED`.
+  2. Downloaded Print PDF as Agency (`GET /api/v1/agency/jobs/{id}/print-pdf`) -> HTTP 200, `application/pdf`, 1098 bytes.
+  3. Downloaded Cards Proof PDF as School (`GET /api/v1/school/orders/{id}/print-pdf`) -> HTTP 200, `application/pdf`, 1098 bytes.
+  4. Downloaded Print PDF as Admin (`GET /api/v1/admin/orders/{id}/print-pdf`) -> HTTP 200, `application/pdf`, 1098 bytes.
+  5. School confirmed delivery receipt (`POST /api/v1/school/orders/{id}/confirm-delivery`) -> created `DEL-2026-0001`, Order transitioned to `DELIVERED`.
+  6. Admin generated Tax Invoice (`POST /api/v1/admin/finance/orders/{id}/invoices`) -> created `INV-2026-0001` for ₹53.10.
+  7. School recorded full payment (`POST /api/v1/school/finance/orders/{id}/payments`) -> created `PAY-2026-0001` (₹53.10), Invoice moved to `PAID`.
+  8. Admin generated and paid Agency Settlement (`POST /api/v1/admin/finance/assignments/{id}/settlement` & `/pay`) -> created `SET-2026-0001` (₹100.00), moved to `SETTLED`.
+  9. Admin closed delivery record -> `DEL-2026-0001` marked `CLOSED`.
+  10. Admin formally closed order (`POST /api/v1/admin/orders/{id}/close`) -> `ORD-2026-7E047A59` moved to `CLOSED`.
+
+### What Is Next
+- Order Replacement / Student Reissuance Requests: Allow schools to initiate replacement requests for lost or damaged student cards directly from the delivered order view.
+
+---
+
+## A4 Imposition Sheet PDF & High-Resolution Image Export (Step 6 Print Extension)
+
+### What Was Built
+1. **A4 Imposition Sheet PDF Generation (`CardPdfRenderingService.renderA4SheetPdf`):**
+   - Implemented commercial imposition layout targeted to `PDRectangle.A4` (595.28 x 841.89 pt).
+   - Dynamic grid alignment based on card orientation:
+     - **Portrait (54 x 85.6 mm):** 3 columns x 3 rows = 9 cards per sheet with centered horizontal & vertical margins.
+     - **Landscape (85.6 x 54 mm):** 2 columns x 5 rows = 10 cards per sheet with centered margins.
+   - **Duplex Column Mirroring:** For back side sheets, mirrors the column index `backCol = (numCols - 1) - col;` ensuring front and back cards align perfectly when flipped along the long edge on commercial duplex printers.
+   - **Cutting Guides & Crop Marks:** Renders subtle dashed card bounding borders (`#CBD5E1`) and solid corner crop tick marks (`#94A3B8`) for print operators.
+   - **Local Coordinate Translation & Box Clipping:** Applied PDF transformation matrix `Matrix.getTranslateInstance(slotX, slotY)` and strict card boundary clipping `stream.clip()` so text or decorative elements never bleed into adjacent card slots.
+   - **Multi-Sheet Pagination & Margin Headers:** Renders school name, academic session, sheet numbers ("Sheet X of Y [FRONT]", "Sheet X of Y [BACK - DUPLEX MIRRORED]").
+
+2. **High-Resolution JPEG ZIP Archive Export (`CardPdfRenderingService.renderJobImagesZip`):**
+   - Renders each student card front and back to 300 DPI `BufferedImage` using `PDFRenderer` with `ImageType.RGB`.
+   - Bundles cards directly into `ZipOutputStream` as `{admission_number}_front.jpg` and `{admission_number}_back.jpg`.
+   - Sanitizes filenames against illegal path characters and prevents zip collisions.
+
+3. **Single Student High-Resolution Image Export (`CardPdfRenderingService.renderSingleStudentImage`):**
+   - Renders individual student card side (front or back) to 300 DPI JPEG bytes.
+
+4. **Agency Tenant Isolation & Job Workflow (`AgencyJobService`):**
+   - Added `renderJobA4SheetPdf(UUID jobId, UUID agencyId)`
+   - Added `renderJobImagesZip(UUID jobId, UUID agencyId)`
+   - Added `renderJobSingleStudentImage(UUID jobId, UUID studentId, UUID agencyId, String side)`
+   - Strictly enforces tenant boundary verification with `agencyAssignmentRepository.findByIdAndAgencyId(jobId, agencyId)`.
+
+5. **Agency Job Controller Endpoints (`AgencyJobController`):**
+   - `GET /api/v1/agency/jobs/{id}/print-a4-sheet`: returns `MediaType.APPLICATION_PDF` with `attachment; filename="job_{job_number}_a4_sheet.pdf"`.
+   - `GET /api/v1/agency/jobs/{id}/download-images`: returns `application/zip` with `attachment; filename="job_{job_number}_cards_jpeg.zip"`.
+   - `GET /api/v1/agency/jobs/{id}/students/{studentId}/download-image`: returns `MediaType.IMAGE_JPEG`.
+
+### How It Was Verified
+- **Unit Test Suite (`CardPdfRenderingServiceTest.java`):**
+  - Added `testRenderA4SheetPdfPortrait`: verifies exact A4 dimensions (595.28 x 841.89 pt), 2-page duplex sheet generation, and front/back card content.
+  - Added `testRenderA4SheetPdfLandscapeMultiSheet`: verifies 12-student pagination across 4 pages (2 imposition sheets) with margin headers.
+  - Added `testRenderJobImagesZip`: unzips and validates 4 image entries (> 500x300 px @ 300 DPI).
+  - Added `testRenderSingleStudentImage`: validates front and back JPEG image dimensions.
+  - Result: **12/12 unit tests passed** in 5.6s (`mvn test -Dtest=CardPdfRenderingServiceTest`).
+- **Agency Security & Integration Tests (`AgencyAssignment*Test`):**
+  - Result: **9/9 tests passed** verifying tenant isolation, role access, and job workflow.
+- **Compilation:** `mvn test-compile` succeeded with 0 errors.
+
+### What Is Next
+- Order Replacement / Student Reissuance Requests: Allow schools to initiate replacement requests for lost or damaged student cards directly from the delivered order view.
+
+---
+
+## Post-Step 12 Feature Log: Interactive Quality Control (QC), Card Proof Roster & Single Student Card Printing
+
+### What Was Built
+1. **Interactive Quality Inspection Checklist (`SubmitQualityCheckModal.jsx`):**
+   - Transformed the plain 3-input dialog into a full visual inspection checklist.
+   - Shows live student roster for the target job/assignment with photos, admission numbers, names, classes, and roll numbers.
+   - Per-student status toggles: **Pass (green)** vs **Defect (red)**.
+   - Inline defect annotator on flagged cards: defect category dropdown (`PRINT_ALIGNMENT`, `COLOR_MISMATCH`, `BLEED_ERROR`, `DAMAGE`, `MISSING_DATA`, `OTHER`) and defect note input.
+   - Live summary stats banner: auto-calculates `Total Inspected`, `Accepted Cards`, `Rejected (Defects)` in real-time.
+   - 1-Click quick actions: **"Pass All Cards"** button for fast batch approval, and reset button.
+   - Search filter to instantly find students by name, admission number, class, or roll number.
+   - Clean fallback to numeric input mode if student snapshots are not loaded.
+   - Submitting an inspection with defects automatically generates a formal reprint authorization request.
+
+2. **Single Card Proof Inspection Modal (`SingleCardPreviewModal.jsx`):**
+   - Reusable modal component integrating `CardCanvas` with student snapshot data.
+   - Dual-sided proof inspection: toggle between **Front Side (Page 1)** and **Back Side (Page 2)**.
+   - Visual display with CR-80 card dimensions (85.6mm x 54.0mm) and 3mm print cutting & bleed safety margin.
+   - Student particulars sheet: displays photo, admission number, class/section, roll number, DOB, blood group, guardian names, emergency contact.
+   - Includes "Download Card PDF" action button to trigger instant single-student PDF rendering.
+
+3. **Agency Job Details Student Cards Roster & Proof Gallery (`AgencyJobDetailPage.jsx`):**
+   - Added prominent **Student ID Cards & Print Proofs** section displaying all assigned student cards.
+   - View mode toggle: **Grid Gallery View** (card tiles with photo avatars and quick actions) vs **List Table View**.
+   - Instant search filter across all student metadata.
+   - Per-student **"Preview Card"** button launching `SingleCardPreviewModal`.
+   - Per-student **"Download PDF"** button triggering single-student print-ready PDF download.
+   - Top header maintains batch print PDF download (`/agency/jobs/{id}/print-pdf`).
+
+4. **Multi-Role Single-Student Print-Ready PDF Backend Endpoints:**
+   - **Agency Endpoint:** `GET /api/v1/agency/jobs/{id}/students/{studentId}/print-pdf` in `AgencyJobController.java` via `agencyJobService.renderJobSingleStudentPdf`.
+   - **School Endpoint:** `GET /api/v1/school/orders/{id}/students/{studentId}/print-pdf` in `SchoolOrderController.java` via `orderService.renderSchoolOrderSingleStudentPdf`.
+   - **Admin Endpoint:** `GET /api/v1/admin/orders/{id}/students/{studentId}/print-pdf` in `AdminOrderController.java` via `orderService.renderOrderSingleStudentPdf`.
+   - Generates high-resolution 2-page print-ready PDF (Page 1 Front, Page 2 Back) using `CardPdfRenderingService.renderCardPdf`.
+
+5. **DTO & Response Upgrades for Card Canvas Rendering:**
+   - `AgencyJobDetailResponse`: populated with `students` snapshot list and full template canvas design JSONs in `specs`.
+   - `AdminAgencyAssignmentDetailResponse`: added `specs` and `students` list.
+   - `AdminOrderDetailResponse` & `SchoolOrderDetailResponse`: added `frontDesignJson`, `backDesignJson`, `cardWidthMm`, `cardHeightMm`, `schoolLogoFileId`.
+   - Added student card preview and single-student PDF download buttons to `AdminOrderDetailPage.jsx` and `OrderDetailPage.jsx` (school).
+   - Fixed unwrap bug in `AgencyProductionPage.jsx` line 25 (`extractArray(res)`).
+
+### How It Was Verified
+- **Backend Test Suite:** Full suite run — **169/169 tests passed** (0 failures, 0 errors).
+- **Frontend Production Build:** `npm --prefix frontend run build` (`vite build`) passed cleanly in 6.15s with 0 errors.
+- **Live Authenticated API Verification:**
+  1. Agency login (`agency@apexprints.com`) -> authenticated successfully with JWT.
+  2. Fetched job details `GET /api/v1/agency/jobs/b0d1d469-7c2b-4a0c-a802-107e42c8973a`: verified `hasFrontDesign: true`, `hasBackDesign: true`, `studentsCount: 3`, student snapshots verified.
+  3. Single student PDF download: `GET /api/v1/agency/jobs/{id}/students/56d89b12-5ee0-4dd7-9843-088a358a14d7/print-pdf` -> HTTP 200, valid PDF `%PDF-1.6`, 454 KB.
+  4. Interactive QC Inspection submission: `POST /api/v1/agency/jobs/{id}/quality-checks` with 2 passed and 1 defect (`PRINT_ALIGNMENT`) -> created `QC-2026-0005` (`CONDITIONALLY_PASSED`).
+  5. Verified automatic reprint trigger in Admin: `GET /api/v1/admin/production/reprints` -> auto-generated `REP-2026-0001` linked to `QC-2026-0005` with `costBearer: AGENCY`.
+  6. School single student PDF download: `GET /api/v1/school/orders/e88cd163-fd2d-4d48-87e3-1f8e471932d1/students/{studentId}/print-pdf` -> HTTP 200, valid PDF `%PDF-1.6`, 454 KB.
+  7. Admin single student PDF download: `GET /api/v1/admin/orders/e88cd163-fd2d-4d48-87e3-1f8e471932d1/students/{studentId}/print-pdf` -> HTTP 200, valid PDF `%PDF-1.6`, 454 KB.
+
+### What Is Next
+- Order Replacement / Student Reissuance Requests: Allow schools to initiate replacement requests for lost or damaged student cards directly from the delivered order view.
+
+---
+
+## Card PDF Rendering Engine Upgrade (CardPdfRenderingService)
+
+### What Was Built
+1. **Text Element "content" Attribute & 24 Placeholders Interpolation:**
+   - Upgraded `renderElement` to prioritize `"content"` attribute (`getProperty(element, "content", "text", "value", "label", "")`), aligning with canvas designer schema.
+   - Comprehensive placeholder resolution in `interpolatePlaceholders`:
+     - Student details: `{{student_name}}`, `{{admission_number}}`, `{{class}}` / `{{class_name}}`, `{{section}}`, `{{roll_number}}` / `{{roll_no}}`, `{{father_name}}`, `{{mother_name}}`, `{{date_of_birth}}` / `{{dob}}`, `{{gender}}`, `{{blood_group}}`, `{{mobile}}` / `{{phone}}`, `{{emergency_contact}}` / `{{emergency}}`, `{{address}}`.
+     - Academic details: `{{academic_session}}` / `{{session}}`, `{{valid_until}}`.
+     - School metadata: `{{school_name}}`, `{{school_code}}`, `{{school_address}}`, `{{school_phone}}`, `{{school_email}}`, `{{school_website}}`, `{{affiliation_number}}`, `{{school_tagline}}`, `{{principal_name}}`.
+   - Multi-line text support: handles `\n` linebreaks cleanly with proper line height and alignment (`left`, `center`, `right`).
+
+2. **Dynamic Background Color:**
+   - Implemented `extractBackgroundColor`: extracts background color from design JSON root (`backgroundColor`, `bgColor`, `background`), side object (`front.backgroundColor`, `back.backgroundColor`), or canvas background element.
+   - Fills page canvas with the parsed color before rendering elements.
+
+3. **School Signature Element & Asset Loading:**
+   - Added dedicated `case "signature"` in `renderElement`.
+   - Implemented `loadSchoolSignature(School school)`: attempts loading via `fileStorageService.loadAsResource(UUID.fromString(school.getSignatureFileId()))`.
+   - If not uploaded, dynamically generates a crisp vectorized signature graphic with ink flourish and "Authorized Signatory" or Principal Name.
+   - In `case "image", "photo"`: routes signature fields (`field.contains("signature")` or `field.contains("sign")`) to `loadSchoolSignature`, and logo fields (`field.contains("logo")` or `field.contains("school")`) to `loadSchoolLogo`.
+
+4. **Photo Box Shapes & Anti-Aliased Clipping:**
+   - Implemented `applyPhotoShape`:
+     - `circle` / `round`: clips photo using `Ellipse2D` and `AlphaComposite.SrcIn`.
+     - `rounded` / `corner_round`: clips photo using `RoundRectangle2D` with specified `borderRadius` (default 4mm).
+     - `square` / `rectangle`: standard rectangle.
+   - Anti-aliased border stroke rendering (`borderColor`, `borderWidth`) in 300+ DPI target resolution.
+
+5. **Dynamic QR Code Generation:**
+   - Reads `content`, `data`, `field`, or `value`, applying placeholder interpolation.
+   - When default or blank, automatically formats a standardized multi-line vCard profile:
+     `BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nORG:{school}\nNOTE:Adm No: {adm} | Class: {class}-{sec} | Blood: {blood}\nTEL:{emergency}\nEND:VCARD`
+   - Generates high-density QR code image (300x300) via ZXing and draws at the specified bounding box.
+
+6. **Vector Shape Elements (Rect / Rounded Rect / Circle / Line):**
+   - Implemented vector path generation directly in PDFBox:
+     - Rounded rectangle with Bezier cubic arc approximation (`addRoundedRectPath`).
+     - Ellipse/circle path (`addEllipsePath`).
+     - Line element.
+   - Full support for `fillColor`, `borderColor`, `borderWidth`, and `borderRadius`.
+
+7. **Rich Fallback Front & Back Templates:**
+   - If template designs have empty elements or null JSON, renders high-fidelity ID card layouts with school logo, header banner, formatted student photo, student details, principal signature, terms & conditions, vCard QR code, and Code128 barcode.
+
+### Frontend Template Designer & Card Proof Enhancements:
+1. **Photo Box Shapes:**
+   - Added interactive shape selector in `PropertyInspector.jsx` and `templatesConstants.js` (`square` / 90°, `rounded` with adjustable radius, `circle` / round avatar, and `pill` / vertical capsule).
+   - Live rendering on `CardCanvas.jsx` with CSS clipping and borders.
+2. **Dynamic Real-Data QR Code Generator:**
+   - Integrated client-side scannable QR generation with `qrcode` library.
+   - Added preset selector in `PropertyInspector.jsx`:
+     - *All ID Card Details (vCard)*
+     - *Student Summary Text*
+     - *Admission Number Only*
+     - *Verification URL*
+     - *Custom Content* with 1-click placeholder injection chips.
+   - Live interpolation with real student data snapshot.
+3. **Canvas Background Color:**
+   - Added color pickers and swatch palettes for Front and Back canvases.
+   - Included `backgroundColor` in design JSON payloads.
+4. **Design Presets & JSON Import Modal (`ImportDesignModal.jsx`):**
+   - Implemented 4 high-contrast presets: *Modern Corporate Blue*, *Classic Academic Maroon*, *Vibrant Emerald Green*, *Minimalist Clean White*.
+   - Added JSON file uploader and raw JSON parser.
+5. **Card Proof & Print Verification:**
+   - Updated `SingleCardPreviewModal.jsx` to pass school logo (`logo_file_id`), signature (`signature_file_id`), and student data.
+   - Verified agency print-ready batch download: `JOB-2026-0001` (1.92 MB), `JOB-2026-0002` (5.82 MB, 24 pages), and single student proof (1.94 MB) containing crisp typography, photos, logos, signatures, barcodes, and dynamic QR codes.
+
+### PDF Rendering Fixes for Layout, Layering & Aspect Ratios:
+1. **Z-Index Layer Sorting:**
+   - Background rectangles and solid banners are sorted to render in the background layer (`zIndex: 10`) before foreground images, student photos, barcodes, QR codes, signatures, and text (`zIndex: 20-30`).
+   - Prevents dark header/footer banners from occluding text or cutting off signatures/QR codes.
+2. **Text Word-Wrapping & Single-Line Auto-Scale:**
+   - Text elements no longer truncate or run off the page edge on portrait (54mm) cards.
+   - Paragraphs wrap cleanly based on bounding box and card page margins (`maxWidthPt`).
+   - Single-line titles automatically shrink font size smoothly if they exceed the title bar width.
+3. **Proportional Image & Signature Containment (`object-fit: contain` / `cover`):**
+   - Signatures and logos now preserve their aspect ratio using `drawContainedImage`, preventing distortion when drawn inside rectangular bounding boxes.
+   - Student photos use proportional `cover` centering before applying circular/rounded corner clipping masks.
+4. **Normalized Escaped Line Breaks:**
+   - Escaped literal `\n` and real linebreaks in terms and conditions or address lines are cleanly converted to true newlines.
+
+### How It Was Verified
+- **Dedicated Unit Test Suite (`CardPdfRenderingServiceTest.java`):**
+  - Result: **8/8 unit tests passed** in 2.4s.
+- **Visual PDF Render Verification:**
+  - Rendered both Page 1 (Front) and Page 2 (Back) to high-resolution PNGs:
+    - Front side: dark navy header bar, crisp school logo, wrapped white school title, rounded student photo, centered student metadata, uncompressed signature, and complete QR code.
+    - Back side: dark navy header bar, clean numbered terms, centered contact info, Code128 barcode, and return notice.
+- **Updated Downloads Folder:**
+  - Copied regenerated `card_preview_sample.pdf`, `card_preview_sample (1).pdf`, and `card_preview_sample (2).pdf` to `C:\Users\a4477\Downloads\`.
+- **Regression Test Suite:**
+  - Ran `mvn test -Dtest=CardTemplate*`: **28/28 tests passed** (5 integration, 23 security).
+- **Compilation & Build:**
+  - Backend: `mvn test-compile` passed with 0 errors.
+  - Frontend: `npm run build` completed with 0 errors.
+- **End-to-End File Verification:**
+  - Regenerated `JOB-2026-0001_cards_print_ready.pdf` and `JOB-2026-0002_cards_print_ready.pdf` in user's Downloads folder.
+
+### What Is Next
+- Order Replacement / Student Reissuance Requests: Allow schools to initiate replacement requests for lost or damaged student cards directly from the delivered order view.
+
+---
+
+## A4 Imposition Sheet PDF & High-Resolution JPEG ZIP Export (Step 6 Print Extension)
+
+### What Was Built
+1. **A4 Imposition Sheet PDF Generation (`CardPdfRenderingService.renderA4SheetPdf`):**
+   - Implemented commercial imposition layout targeted to `PDRectangle.A4` (595.28 x 841.89 pt).
+   - Dynamic grid alignment based on card orientation:
+     - **Portrait (54 x 85.6 mm):** 3 columns x 3 rows = 9 cards per sheet with centered horizontal & vertical margins.
+     - **Landscape (85.6 x 54 mm):** 2 columns x 5 rows = 10 cards per sheet with centered margins.
+   - **Duplex Column Mirroring:** For back side sheets, mirrors the column index `backCol = (numCols - 1) - col;` ensuring front and back cards align perfectly when flipped along the long edge on commercial duplex printers.
+   - **Cutting Guides & Crop Marks:** Renders subtle dashed card bounding borders (`#CBD5E1`) and solid corner crop tick marks (`#94A3B8`) for print operators.
+   - **Local Coordinate Translation & Box Clipping:** Applied PDF transformation matrix `Matrix.getTranslateInstance(slotX, slotY)` and strict card boundary clipping `stream.clip()` so text or decorative elements never bleed into adjacent card slots.
+   - **Multi-Sheet Pagination & Margin Headers:** Renders school name, academic session, sheet numbers ("Sheet X of Y [FRONT]", "Sheet X of Y [BACK - DUPLEX MIRRORED]").
+
+2. **High-Resolution JPEG ZIP Archive Export (`CardPdfRenderingService.renderJobImagesZip`):**
+   - Renders each student card front and back to 300 DPI `BufferedImage` using `PDFRenderer` with `ImageType.RGB`.
+   - Bundles cards directly into `ZipOutputStream` as `{admission_number}_front.jpg` and `{admission_number}_back.jpg`.
+   - Sanitizes filenames against illegal path characters and prevents zip entry collisions.
+
+3. **Single Student High-Resolution Image Export (`CardPdfRenderingService.renderSingleStudentImage`):**
+   - Renders individual student card side (front or back) to 300 DPI JPEG bytes.
+
+4. **Agency Tenant Isolation & Job Workflow (`AgencyJobService`):**
+   - Added `renderJobA4SheetPdf(UUID jobId, UUID agencyId)`
+   - Added `renderJobImagesZip(UUID jobId, UUID agencyId)`
+   - Added `renderJobSingleStudentImage(UUID jobId, UUID studentId, UUID agencyId, String side)`
+   - Strictly enforces tenant boundary verification with `agencyAssignmentRepository.findByIdAndAgencyId(jobId, agencyId)`.
+
+5. **Agency Job Controller Endpoints (`AgencyJobController`):**
+   - `GET /api/v1/agency/jobs/{id}/print-a4-sheet`: returns `MediaType.APPLICATION_PDF` with `attachment; filename="job_{job_number}_a4_sheet.pdf"`.
+   - `GET /api/v1/agency/jobs/{id}/download-images`: returns `application/zip` with `attachment; filename="job_{job_number}_cards_jpeg.zip"`.
+   - `GET /api/v1/agency/jobs/{id}/students/{studentId}/download-image`: returns `MediaType.IMAGE_JPEG`.
+
+### How It Was Verified
+- **Unit Test Suite (`CardPdfRenderingServiceTest.java`):**
+  - Added `testRenderA4SheetPdfPortrait`: verifies exact A4 dimensions (595.28 x 841.89 pt), 2-page duplex sheet generation, and front/back card content.
+  - Added `testRenderA4SheetPdfLandscapeMultiSheet`: verifies 12-student pagination across 4 pages (2 imposition sheets) with margin headers.
+  - Added `testRenderJobImagesZip`: unzips and validates 4 image entries (> 500x300 px @ 300 DPI).
+  - Added `testRenderSingleStudentImage`: validates front and back JPEG image dimensions.
+  - Result: **12/12 unit tests passed** in 5.6s (`mvn test -Dtest=CardPdfRenderingServiceTest`).
+- **Agency Security & Integration Tests (`AgencyAssignment*Test`):**
+  - Result: **9/9 tests passed** verifying tenant isolation, role access, and job workflow.
+- **Compilation:** `mvn test-compile` succeeded with 0 errors.
+
+---
+
+---
+
+## Step 9 Log: 300 DPI Java2D Prepress Rendering Engine, A4 Imposition PDF & JPEG Sheets, Admin/Agency Direct Print Parity, and GitHub Sync
+
+### What Was Built
+1. **300 DPI Java2D Prepress Rendering Engine (`CardPdfRenderingService.renderCardToBufferedImage`):**
+   - Replaced fragile vector PDFBox canvas coordinate scaling with a pixel-perfect Java2D top-down renderer ($300\text{ DPI} = 11.811\text{ px/mm}$).
+   - Generates exact physical CR80 dimensions ($54\text{ mm} \times 85.6\text{ mm} = 638 \times 1011\text{ px}$ for portrait, $85.6\text{ mm} \times 54\text{ mm} = 1011 \times 638\text{ px}$ for landscape).
+   - Strict element boundary clipping `g2.clipRect(elX, elY, elW, elH)` prevents text or shape bleed into adjacent elements.
+   - Dynamic font auto-fitting shrinks long titles incrementally so school titles and headers never collide with subtitles or photo frames.
+   - Eliminates ghost elements by filtering out any items positioned outside physical card boundaries ($x \ge \text{cardWidthMm}$ or $y \ge \text{cardHeightMm}$).
+   - Photo shapes supported: `circle` / `round`, `pill`, `rounded`, and `square` with borders and aspect-ratio cover.
+   - Simulated ink signature matching designed preview: smooth cubic Bézier curve, separator line, and principal signatory name in bold uppercase.
+   - Dynamic ZXing scannable QR code and Code 128 barcode integration.
+
+2. **Unified PDF & JPEG Pipeline (Card Image First):**
+   - Both single card PDF (`renderCardPdf`), batch cards PDF (`renderBatchPdf`), and A4 imposition sheet PDF (`renderA4SheetPdf`) place the 300 DPI `BufferedImage` directly onto the PDF page with `LosslessFactory.createFromImage`.
+   - Invisible text layer added via `RenderingMode.NEITHER` ensures PDF text accessibility, copy-paste, and searchability while guaranteeing zero visual discrepancies.
+   - A4 sheet JPEG export (`renderA4SheetImage`) renders $2480 \times 3508\text{ px}$ imposition sheets with cutting guides and duplex column mirroring.
+
+3. **Super Admin & Agency Portal Print Parity:**
+   - **Backend Endpoints:**
+     - `GET /api/v1/agency/jobs/{id}/print-a4-image`: A4 imposition sheet 300 DPI JPEG.
+     - `GET /api/v1/admin/orders/{id}/print-a4-sheet`: A4 imposition sheet PDF.
+     - `GET /api/v1/admin/orders/{id}/print-a4-image`: A4 imposition sheet 300 DPI JPEG.
+     - `GET /api/v1/admin/orders/{id}/download-images`: 300 DPI card images ZIP archive.
+     - `GET /api/v1/admin/orders/{id}/students/{studentId}/download-image`: Single student card JPEG.
+   - **Frontend UI (`AdminOrderDetailPage.jsx` & `AgencyJobDetailPage.jsx`):**
+     - Direct Print (A4 Sheet Layout)
+     - Direct Print (Cards)
+     - A4 PDF Sheet download
+     - A4 JPEG Sheet download
+     - Cards PDF download
+     - 300 DPI ZIP download
+     - Per-student Preview, Direct Print, PDF, and JPEG downloads.
+
+### How It Was Verified
+- **Unit & Security Tests:** `CardPdfRenderingServiceTest`, `AgencyAssignmentSecurityTest`, `AgencyAssignmentIntegrationTest` — **21/21 tests passed**.
+- **Frontend Production Build:** `npm --prefix frontend run build` completed with **0 errors**.
+- **Live Image & PDF Verification:** Verified $638 \times 1011\text{ px}$ card images and $2480 \times 3508\text{ px}$ A4 sheets exported via REST endpoints with JWT authentication.
+
+---
+
 ## Questions & Blockers
 *None. All requirements successfully satisfied.*
 

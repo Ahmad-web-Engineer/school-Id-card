@@ -32,10 +32,15 @@ import {
   Calculator,
   Plus,
   Trash2,
-  Briefcase
+  Briefcase,
+  Printer,
+  Download,
+  Eye,
 } from 'lucide-react';
 import AssignAgencyModal from '../../features/assignments/AssignAgencyModal';
+import SingleCardPreviewModal from '../../features/templates/SingleCardPreviewModal';
 import { ASSIGNMENT_STATUSES } from '../../features/assignments/assignmentsConstants';
+import { directPrintUrl } from '../../utils/printHelper';
 
 export default function AdminOrderDetailPage() {
   const { id } = useParams();
@@ -45,6 +50,10 @@ export default function AdminOrderDetailPage() {
   const [studentSearch, setStudentSearch] = useState('');
   const [actionError, setActionError] = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
+
+  // Student Card Preview & Download State
+  const [selectedPreviewStudent, setSelectedPreviewStudent] = useState(null);
+  const [downloadingStudentId, setDownloadingStudentId] = useState(null);
 
   // Assignment Modal State
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -58,6 +67,200 @@ export default function AdminOrderDetailPage() {
   const [quoteItems, setQuoteItems] = useState([]);
   const [quoteDiscount, setQuoteDiscount] = useState('0.00');
   const [quoteNotes, setQuoteNotes] = useState('Payment within 15 days of invoice date.');
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [isDirectPrinting, setIsDirectPrinting] = useState(null);
+  const [isDownloadingA4, setIsDownloadingA4] = useState(false);
+  const [isDownloadingA4Jpg, setIsDownloadingA4Jpg] = useState(false);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+  const [downloadingImageStudentId, setDownloadingImageStudentId] = useState(null);
+
+  const handleDirectPrintA4 = async () => {
+    try {
+      setIsDirectPrinting('a4');
+      setActionError(null);
+      await directPrintUrl(`/api/v1/admin/orders/${id}/print-a4-sheet`, 'A4 Imposition Sheet');
+    } catch (err) {
+      setActionError('Direct print failed: ' + (err.message || 'Printer error'));
+    } finally {
+      setIsDirectPrinting(null);
+    }
+  };
+
+  const handleDirectPrintCards = async () => {
+    try {
+      setIsDirectPrinting('cards');
+      setActionError(null);
+      await directPrintUrl(`/api/v1/admin/orders/${id}/print-pdf`, 'Order Cards');
+    } catch (err) {
+      setActionError('Direct print failed: ' + (err.message || 'Printer error'));
+    } finally {
+      setIsDirectPrinting(null);
+    }
+  };
+
+  const handleDownloadA4 = async () => {
+    try {
+      setIsDownloadingA4(true);
+      setActionError(null);
+      const res = await api.get(`/admin/orders/${id}/print-a4-sheet`, { responseType: 'blob' });
+      const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${order.orderNumber || 'order'}_a4_imposition_sheet.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to generate A4 imposition sheet PDF.');
+    } finally {
+      setIsDownloadingA4(false);
+    }
+  };
+
+  const handleDownloadA4Jpg = async (side = 'front') => {
+    try {
+      setIsDownloadingA4Jpg(true);
+      setActionError(null);
+      const res = await api.get(`/admin/orders/${id}/print-a4-image?side=${side}`, { responseType: 'blob' });
+      const blob = res instanceof Blob ? res : new Blob([res], { type: 'image/jpeg' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${order.orderNumber || 'order'}_a4_sheet_${side}.jpg`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to download A4 sheet JPEG image.');
+    } finally {
+      setIsDownloadingA4Jpg(false);
+    }
+  };
+
+  const handleDownloadZip = async () => {
+    try {
+      setIsDownloadingZip(true);
+      setActionError(null);
+      const res = await api.get(`/admin/orders/${id}/download-images`, { responseType: 'blob' });
+      const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${order.orderNumber || 'order'}_cards_300dpi_jpegs.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to download card JPEG ZIP bundle.');
+    } finally {
+      setIsDownloadingZip(false);
+    }
+  };
+
+  const handleDownloadSingleImage = async (student, side = 'front') => {
+    const studentId = student.studentId || student.id;
+    try {
+      setDownloadingImageStudentId(studentId);
+      setActionError(null);
+      const res = await api.get(`/admin/orders/${id}/students/${studentId}/download-image?side=${side}`, { responseType: 'blob' });
+      const blob = res instanceof Blob ? res : new Blob([res], { type: 'image/jpeg' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${student.admissionNumber || studentId}_${side}.jpg`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to download student JPEG image.');
+    } finally {
+      setDownloadingImageStudentId(null);
+    }
+  };
+
+  const handleDirectPrintSingleStudent = async (student) => {
+    const studentId = student.studentId || student.id;
+    try {
+      setIsDirectPrinting(studentId);
+      setActionError(null);
+      await directPrintUrl(`/api/v1/admin/orders/${id}/students/${studentId}/print-pdf`, `Student Card ${student.studentName}`);
+    } catch (err) {
+      setActionError('Failed to print student card.');
+    } finally {
+      setIsDirectPrinting(null);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      setIsDownloadingPdf(true);
+      setActionError(null);
+      const res = await api.get(`/admin/orders/${id}/print-pdf`, { responseType: 'blob' });
+      const blob = new Blob([res], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${order.orderNumber || 'order'}_cards_print_ready.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to generate print-ready card PDF.');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
+  const handleDownloadSinglePdf = async (student) => {
+    const studentId = student.studentId || student.id;
+    try {
+      setDownloadingStudentId(studentId);
+      setActionError(null);
+      const res = await api.get(`/admin/orders/${id}/students/${studentId}/print-pdf`, { responseType: 'blob' });
+      const blob = new Blob([res], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `card_${student.admissionNumber || studentId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to generate single student ID card PDF.');
+    } finally {
+      setDownloadingStudentId(null);
+    }
+  };
+
+  const generateInvoiceMutation = useMutation({
+    mutationFn: () => api.post(`/admin/finance/orders/${id}/invoices`, {}),
+    onSuccess: (res) => {
+      setActionSuccess(`Tax Invoice ${res?.data?.invoiceNumber || ''} generated successfully!`);
+      queryClient.invalidateQueries({ queryKey: ['admin-order-detail', id] });
+    },
+    onError: (err) => {
+      setActionError(err.message || 'Failed to generate tax invoice.');
+    },
+  });
+
+  const closeOrderMutation = useMutation({
+    mutationFn: () => api.post(`/admin/orders/${id}/close`),
+    onSuccess: () => {
+      setActionSuccess('Order marked as CLOSED and archived successfully.');
+      queryClient.invalidateQueries({ queryKey: ['admin-order-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+    },
+    onError: (err) => {
+      setActionError(err.message || 'Failed to close order.');
+    },
+  });
 
   // 1. Fetch Order Details
   const {
@@ -302,6 +505,117 @@ export default function AdminOrderDetailPage() {
               {order.orderStatus === 'QUOTATION_GENERATED' ? 'Regenerate Quotation' : 'Generate Quotation'}
             </Button>
           )}
+          {['APPROVED', 'AWAITING_ASSIGNMENT', 'ASSIGNED', 'IN_PRODUCTION', 'QUALITY_CHECK', 'DISPATCHED', 'DELIVERED', 'CLOSED'].includes(order.orderStatus) && (
+            <>
+              {/* Direct Print Actions */}
+              <Button
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 shadow-xs"
+                onClick={handleDirectPrintA4}
+                disabled={isDirectPrinting === 'a4'}
+                title="Send A4 Imposition Sheet directly to printer dialog"
+              >
+                {isDirectPrinting === 'a4' ? (
+                  <LoadingSpinner size="xs" />
+                ) : (
+                  <Printer className="h-4 w-4" />
+                )}
+                Direct Print (A4 Sheet)
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 flex items-center gap-1.5"
+                onClick={handleDirectPrintCards}
+                disabled={isDirectPrinting === 'cards'}
+                title="Send individual CR80 ID cards directly to card printer dialog"
+              >
+                {isDirectPrinting === 'cards' ? (
+                  <LoadingSpinner size="xs" />
+                ) : (
+                  <Printer className="h-4 w-4 text-indigo-600" />
+                )}
+                Direct Print (Cards)
+              </Button>
+
+              {/* Download File Options */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
+                onClick={handleDownloadA4}
+                disabled={isDownloadingA4}
+                title="Download A4 Grid Layout PDF with duplex alignment and crop marks"
+              >
+                {isDownloadingA4 ? (
+                  <LoadingSpinner size="xs" />
+                ) : (
+                  <FileText className="h-4 w-4 text-indigo-600" />
+                )}
+                A4 PDF Sheet
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
+                onClick={() => handleDownloadA4Jpg('front')}
+                disabled={isDownloadingA4Jpg}
+                title="Download A4 Imposition Sheet as 300 DPI high-resolution JPEG"
+              >
+                {isDownloadingA4Jpg ? (
+                  <LoadingSpinner size="xs" />
+                ) : (
+                  <Download className="h-4 w-4 text-emerald-600" />
+                )}
+                A4 JPEG Sheet
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
+                onClick={handleDownloadPdf}
+                disabled={isDownloadingPdf}
+                title="Download CR80 Individual Cards multi-page PDF"
+              >
+                {isDownloadingPdf ? (
+                  <LoadingSpinner size="xs" />
+                ) : (
+                  <Download className="h-4 w-4 text-indigo-600" />
+                )}
+                Cards PDF
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
+                onClick={handleDownloadZip}
+                disabled={isDownloadingZip}
+                title="Download all cards as 300 DPI high-resolution JPEG images in a ZIP"
+              >
+                {isDownloadingZip ? (
+                  <LoadingSpinner size="xs" />
+                ) : (
+                  <Package className="h-4 w-4 text-indigo-600" />
+                )}
+                300 DPI ZIP
+              </Button>
+
+              <Button
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
+                onClick={() => generateInvoiceMutation.mutate()}
+                disabled={generateInvoiceMutation.isPending}
+              >
+                <Receipt className="h-4 w-4" />
+                {generateInvoiceMutation.isPending ? 'Generating...' : 'Issue Tax Invoice'}
+              </Button>
+            </>
+          )}
+
           {['APPROVED', 'AWAITING_ASSIGNMENT', 'ASSIGNED'].includes(order.orderStatus) && (
             <Button
               size="sm"
@@ -310,6 +624,18 @@ export default function AdminOrderDetailPage() {
             >
               <Briefcase className="h-4 w-4 mr-1.5" />
               Assign to Agency
+            </Button>
+          )}
+
+          {order.orderStatus === 'DELIVERED' && (
+            <Button
+              size="sm"
+              className="bg-slate-900 hover:bg-slate-800 text-white flex items-center gap-1.5"
+              onClick={() => closeOrderMutation.mutate()}
+              disabled={closeOrderMutation.isPending}
+            >
+              {closeOrderMutation.isPending ? <LoadingSpinner size="xs" /> : <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
+              Close Order
             </Button>
           )}
         </div>
@@ -541,6 +867,7 @@ export default function AdminOrderDetailPage() {
                 <th className="px-3 py-2.5 text-left">Blood Group</th>
                 <th className="px-3 py-2.5 text-left">Emergency Contact</th>
                 <th className="px-3 py-2.5 text-left">Photo</th>
+                <th className="px-3 py-2.5 text-right">Card Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 text-slate-800 bg-white">
@@ -550,7 +877,7 @@ export default function AdminOrderDetailPage() {
                   <td className="px-3 py-2 font-medium text-slate-900">{s.studentName}</td>
                   <td className="px-3 py-2 text-slate-600 font-mono">{s.admissionNumber}</td>
                   <td className="px-3 py-2 text-slate-700">
-                    {s.standard}{s.section ? ` - ${s.section}` : ''}
+                    {s.standard || s.className}{s.section ? ` - ${s.section}` : ''}
                   </td>
                   <td className="px-3 py-2 text-slate-500">{s.rollNumber || '-'}</td>
                   <td className="px-3 py-2 text-slate-600">{s.bloodGroup || '-'}</td>
@@ -565,6 +892,61 @@ export default function AdminOrderDetailPage() {
                         <AlertTriangle className="h-3 w-3 mr-0.5" /> Missing
                       </span>
                     )}
+                  </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPreviewStudent(s)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100"
+                        title="Preview ID card front & back"
+                      >
+                        <Eye className="w-3 h-3" />
+                        Preview
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDirectPrintSingleStudent(s)}
+                        disabled={isDirectPrinting === (s.studentId || s.id)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-indigo-700 bg-indigo-50/50 border border-indigo-200 rounded-md hover:bg-indigo-100"
+                        title="Direct print single student card"
+                      >
+                        {isDirectPrinting === (s.studentId || s.id) ? (
+                          <LoadingSpinner size="sm" />
+                        ) : (
+                          <Printer className="w-3 h-3 text-indigo-600" />
+                        )}
+                        Print
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadSinglePdf(s)}
+                        disabled={downloadingStudentId === (s.studentId || s.id)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-md hover:bg-slate-200"
+                        title="Download print-ready PDF"
+                      >
+                        {downloadingStudentId === (s.studentId || s.id) ? (
+                          <LoadingSpinner size="sm" />
+                        ) : (
+                          <Download className="w-3 h-3" />
+                        )}
+                        PDF
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadSingleImage(s, 'front')}
+                        disabled={downloadingImageStudentId === (s.studentId || s.id)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100"
+                        title="Download 300 DPI JPEG"
+                      >
+                        {downloadingImageStudentId === (s.studentId || s.id) ? (
+                          <LoadingSpinner size="sm" />
+                        ) : (
+                          <Download className="w-3 h-3 text-emerald-600" />
+                        )}
+                        JPEG
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -746,6 +1128,26 @@ export default function AdminOrderDetailPage() {
             queryClient.invalidateQueries({ queryKey: ['admin-order-detail', id] });
             queryClient.invalidateQueries({ queryKey: ['admin-order-assignments', id] });
           }}
+        />
+      )}
+
+      {/* Single Card Proof Inspection Modal */}
+      {selectedPreviewStudent && (
+        <SingleCardPreviewModal
+          isOpen={!!selectedPreviewStudent}
+          onClose={() => setSelectedPreviewStudent(null)}
+          student={selectedPreviewStudent}
+          cardSpecs={{
+            widthMm: order.cardWidthMm || 85.6,
+            heightMm: order.cardHeightMm || 54.0,
+            bleedMarginMm: 3.0,
+            frontDesignJson: order.frontDesignJson,
+            backDesignJson: order.backDesignJson,
+            schoolName: order.schoolName,
+            schoolLogoFileId: order.schoolLogoFileId,
+          }}
+          onDownloadPdf={handleDownloadSinglePdf}
+          isDownloadingPdf={downloadingStudentId === (selectedPreviewStudent?.studentId || selectedPreviewStudent?.id)}
         />
       )}
     </div>

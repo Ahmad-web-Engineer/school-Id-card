@@ -1,4 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
+import QRCode from 'qrcode';
 import { substitutePlaceholders, SAMPLE_STUDENT_DATA } from './templatesConstants';
 import { User, QrCode as QrIcon, Barcode as BarcodeIcon, Image as ImageIcon, Sparkles } from 'lucide-react';
 
@@ -8,23 +9,54 @@ export default function CardCanvas({
   bleedMarginMm = 3.0,
   showBleed = true,
   elements = [],
+  backgroundColor = '#ffffff',
   selectedElementId = null,
   onSelectElement,
   onElementChange,
   interactive = true,
-  previewData = null, // If null, can show placeholders or sample data depending on useSampleData
+  previewData = null,
   useSampleData = true,
-  scale = 4.8, // px per mm: 85.6mm * 4.8 = 410.88px
+  scale = 4.8, // px per mm
   className = '',
 }) {
   const containerRef = useRef(null);
   const [dragState, setDragState] = useState(null);
+  const [qrCodeDataUrls, setQrCodeDataUrls] = useState({});
 
   const canvasWidthPx = widthMm * scale;
   const canvasHeightPx = heightMm * scale;
   const bleedMarginPx = bleedMarginMm * scale;
 
   const activeStudentData = previewData || (useSampleData ? SAMPLE_STUDENT_DATA : null);
+
+  // Generate dynamic scannable QR Code Data URLs whenever elements or preview data changes
+  useEffect(() => {
+    const qrElements = elements.filter((el) => el.type === 'qrcode' || el.type === 'qr');
+    if (qrElements.length === 0) return;
+
+    qrElements.forEach((el) => {
+      const template = el.content || el.data || el.dataFeed || '{{admission_number}}';
+      const textToEncode = activeStudentData
+        ? substitutePlaceholders(template, activeStudentData)
+        : template;
+
+      QRCode.toDataURL(textToEncode || 'ID-CARD-PREVIEW', {
+        margin: 1,
+        width: Math.max(128, Math.round((el.width || 15) * scale * 2)),
+        errorCorrectionLevel: 'M',
+        color: {
+          dark: el.color || '#000000',
+          light: '#ffffff',
+        },
+      })
+        .then((url) => {
+          setQrCodeDataUrls((prev) => ({ ...prev, [el.id]: url }));
+        })
+        .catch((err) => {
+          console.warn('QR Code generation error:', err);
+        });
+    });
+  }, [elements, activeStudentData, scale]);
 
   // Mouse drag handler for repositioning elements
   const handleMouseDown = (e, element) => {
@@ -72,9 +104,6 @@ export default function CardCanvas({
     if (dragState) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
-    } else {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
     }
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
@@ -89,6 +118,33 @@ export default function CardCanvas({
     }
   };
 
+  // Helper to resolve image source
+  const getPhotoSrc = () => {
+    if (!activeStudentData) return null;
+    if (activeStudentData.photoFileId) {
+      return `/api/v1/files/${activeStudentData.photoFileId}/download`;
+    }
+    return activeStudentData.photo_url || activeStudentData.photoUrl || null;
+  };
+
+  const getLogoSrc = () => {
+    if (!activeStudentData) return null;
+    const logoId = activeStudentData.schoolLogoFileId || activeStudentData.logoFileId;
+    if (logoId) {
+      return `/api/v1/files/${logoId}/download`;
+    }
+    return activeStudentData.school_logo_url || activeStudentData.logoUrl || null;
+  };
+
+  const getSignatureSrc = () => {
+    if (!activeStudentData) return null;
+    const signId = activeStudentData.signatureFileId;
+    if (signId) {
+      return `/api/v1/files/${signId}/download`;
+    }
+    return activeStudentData.signature_url || activeStudentData.signatureUrl || null;
+  };
+
   return (
     <div className={`relative flex flex-col items-center justify-center p-3 sm:p-5 select-none ${className}`}>
       {/* Outer Card Wrapper with Shadow & Exact Aspect Ratio */}
@@ -98,8 +154,9 @@ export default function CardCanvas({
         style={{
           width: `${canvasWidthPx}px`,
           height: `${canvasHeightPx}px`,
+          backgroundColor: backgroundColor || '#ffffff',
         }}
-        className="relative bg-white shadow-xl rounded-md overflow-hidden border border-slate-300 transition-all duration-75"
+        className="relative shadow-xl rounded-md overflow-hidden border border-slate-300 transition-all duration-75"
       >
         {/* Bleed Margin Indicator (3mm) */}
         {showBleed && (
@@ -158,14 +215,14 @@ export default function CardCanvas({
               )}
 
               {/* RENDER ELEMENT BY TYPE */}
-              {/* 1. Rectangle / Banner Bar */}
+              {/* 1. Rectangle / Banner Bar / Shape */}
               {el.type === 'rect' && (
                 <div
                   style={{
                     backgroundColor: el.backgroundColor || '#1e3a8a',
                     borderColor: el.borderColor || 'transparent',
                     borderWidth: el.borderWidth ? `${el.borderWidth}px` : 0,
-                    borderRadius: el.borderRadius ? `${el.borderRadius * 2}px` : 0,
+                    borderRadius: el.borderRadius ? `${el.borderRadius * scale}px` : 0,
                   }}
                   className="w-full h-full"
                 />
@@ -194,25 +251,78 @@ export default function CardCanvas({
                   className="w-full h-full flex flex-col justify-center overflow-hidden whitespace-pre-wrap break-words"
                 >
                   {activeStudentData
-                    ? substitutePlaceholders(el.content || '', activeStudentData)
-                    : el.content || '{{text}}'}
+                    ? substitutePlaceholders(el.content || el.text || '', activeStudentData)
+                    : el.content || el.text || '{{text}}'}
                 </div>
               )}
 
-              {/* 3. Image Box (Student Photo or School Logo) */}
-              {el.type === 'image' && (
-                <div
-                  style={{
-                    borderColor: el.borderColor || '#cbd5e1',
-                    borderWidth: el.borderWidth ? `${el.borderWidth}px` : 1,
-                    borderRadius: el.borderRadius ? `${el.borderRadius * 2}px` : 2,
-                  }}
-                  className="w-full h-full bg-slate-100 overflow-hidden flex flex-col items-center justify-center relative border shadow-inner"
-                >
-                  {el.field === 'student_photo' ? (
-                    activeStudentData?.photo_url || activeStudentData?.photoUrl ? (
+              {/* 3. Image Box (Student Photo, School Logo, Custom) with Photo Shapes */}
+              {el.type === 'image' && (() => {
+                const shape = el.shape || el.photoShape || (el.borderRadius > 10 ? 'circle' : 'rounded');
+                let borderRadius = '0px';
+                let overflowClass = 'overflow-hidden';
+
+                if (shape === 'circle' || shape === 'round') {
+                  borderRadius = '9999px';
+                } else if (shape === 'pill') {
+                  borderRadius = '9999px';
+                } else if (shape === 'square') {
+                  borderRadius = '0px';
+                } else {
+                  borderRadius = `${(el.borderRadius !== undefined ? el.borderRadius : 2) * scale}px`;
+                }
+
+                const isLogo = el.field === 'school_logo' || (el.label || '').toLowerCase().includes('logo');
+                const isSign = el.field === 'signature' || (el.label || '').toLowerCase().includes('sign');
+
+                const photoSrc = getPhotoSrc();
+                const logoSrc = getLogoSrc();
+                const signSrc = getSignatureSrc();
+
+                return (
+                  <div
+                    style={{
+                      borderColor: el.borderColor || '#cbd5e1',
+                      borderWidth: el.borderWidth ? `${el.borderWidth}px` : 1,
+                      borderRadius,
+                      backgroundColor: el.backgroundColor || (isLogo ? 'transparent' : '#f8fafc'),
+                    }}
+                    className={`w-full h-full ${overflowClass} flex flex-col items-center justify-center relative border shadow-xs`}
+                  >
+                    {isLogo ? (
+                      logoSrc ? (
+                        <img
+                          src={logoSrc}
+                          alt="School Logo"
+                          className="w-full h-full object-contain p-0.5"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center p-0.5 text-indigo-700 bg-indigo-50 w-full h-full">
+                          <Sparkles className="w-5 h-5 text-indigo-600" />
+                          <span className="text-[6px] font-bold uppercase tracking-wider text-indigo-900">
+                            Logo
+                          </span>
+                        </div>
+                      )
+                    ) : isSign ? (
+                      signSrc ? (
+                        <img
+                          src={signSrc}
+                          alt="Signature"
+                          className="w-full h-full object-contain p-0.5"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="text-[7px] text-slate-400 font-medium">Signature</div>
+                      )
+                    ) : photoSrc ? (
                       <img
-                        src={activeStudentData.photo_url || activeStudentData.photoUrl}
+                        src={photoSrc}
                         alt="Student"
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -223,94 +333,77 @@ export default function CardCanvas({
                       <div className="flex flex-col items-center justify-center p-1 text-slate-400">
                         <User className="w-8 h-8 text-slate-300 stroke-[1.5]" />
                         <span className="text-[7px] text-slate-400 font-medium tracking-tight mt-0.5">
-                          Photo Frame
+                          {shape === 'circle' ? 'Round Photo' : shape === 'pill' ? 'Pill Photo' : 'Photo Frame'}
                         </span>
                       </div>
-                    )
-                  ) : el.field === 'school_logo' ? (
-                    activeStudentData?.school_logo_url || activeStudentData?.logoUrl ? (
-                      <img
-                        src={activeStudentData.school_logo_url || activeStudentData.logoUrl}
-                        alt="School Logo"
-                        className="w-full h-full object-contain p-0.5"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center p-0.5 text-indigo-700 bg-indigo-50 w-full h-full">
-                        <Sparkles className="w-5 h-5 text-indigo-600" />
-                        <span className="text-[6px] font-bold uppercase tracking-wider text-indigo-900">
-                          Logo
-                        </span>
-                      </div>
-                    )
-                  ) : (
-                    <div className="flex flex-col items-center justify-center text-slate-400">
-                      <ImageIcon className="w-6 h-6" />
-                      <span className="text-[7px]">Image</span>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                );
+              })()}
 
-              {/* 4. QR Code Box */}
-              {el.type === 'qrcode' && (
-                <div className="w-full h-full bg-white p-1 border border-slate-300 rounded flex flex-col items-center justify-center shadow-sm">
-                  {/* High quality simulated SVG QR Matrix */}
-                  <svg
-                    viewBox="0 0 33 33"
-                    className="w-full h-full"
-                    shapeRendering="crispEdges"
-                    fill="currentColor"
-                  >
-                    {/* Top-Left Finder */}
-                    <path d="M0,0 h7 v7 h-7 z M1,1 v5 h5 v-5 z M2,2 h3 v3 h-3 z" />
-                    {/* Top-Right Finder */}
-                    <path d="M26,0 h7 v7 h-7 z M27,1 v5 h5 v-5 z M28,2 h3 v3 h-3 z" />
-                    {/* Bottom-Left Finder */}
-                    <path d="M0,26 h7 v7 h-7 z M1,27 v5 h5 v-5 z M2,28 h3 v3 h-3 z" />
-                    {/* Data modules */}
-                    <rect x="9" y="1" width="2" height="2" />
-                    <rect x="13" y="1" width="3" height="1" />
-                    <rect x="18" y="2" width="2" height="3" />
-                    <rect x="22" y="1" width="2" height="2" />
-                    <rect x="9" y="5" width="4" height="2" />
-                    <rect x="15" y="6" width="3" height="3" />
-                    <rect x="20" y="5" width="2" height="2" />
-                    <rect x="9" y="9" width="3" height="3" />
-                    <rect x="14" y="11" width="5" height="2" />
-                    <rect x="21" y="9" width="3" height="4" />
-                    <rect x="26" y="9" width="4" height="2" />
-                    <rect x="2" y="10" width="3" height="2" />
-                    <rect x="1" y="14" width="4" height="3" />
-                    <rect x="7" y="14" width="3" height="2" />
-                    <rect x="12" y="15" width="3" height="4" />
-                    <rect x="17" y="15" width="4" height="3" />
-                    <rect x="23" y="15" width="2" height="3" />
-                    <rect x="27" y="13" width="5" height="3" />
-                    <rect x="2" y="19" width="4" height="2" />
-                    <rect x="8" y="18" width="2" height="4" />
-                    <rect x="12" y="21" width="5" height="2" />
-                    <rect x="19" y="20" width="3" height="4" />
-                    <rect x="24" y="20" width="3" height="2" />
-                    <rect x="29" y="18" width="3" height="3" />
-                    <rect x="9" y="25" width="3" height="3" />
-                    <rect x="14" y="25" width="4" height="2" />
-                    <rect x="20" y="26" width="3" height="3" />
-                    <rect x="25" y="24" width="5" height="3" />
-                    <rect x="9" y="30" width="5" height="2" />
-                    <rect x="16" y="29" width="3" height="3" />
-                    <rect x="21" y="30" width="4" height="2" />
-                    <rect x="27" y="29" width="3" height="3" />
-                  </svg>
+              {/* 4. Real Dynamic Scannable QR Code Box */}
+              {(el.type === 'qrcode' || el.type === 'qr') && (
+                <div
+                  style={{
+                    borderRadius: el.borderRadius ? `${el.borderRadius * scale}px` : '4px',
+                    backgroundColor: el.backgroundColor || '#ffffff',
+                    borderColor: el.borderColor || '#e2e8f0',
+                    borderWidth: el.borderWidth ? `${el.borderWidth}px` : 1,
+                  }}
+                  className="w-full h-full p-1 border rounded flex flex-col items-center justify-center shadow-xs overflow-hidden"
+                >
+                  {qrCodeDataUrls[el.id] ? (
+                    <img
+                      src={qrCodeDataUrls[el.id]}
+                      alt="Student QR Code"
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    /* Fallback crisp SVG Finder Matrix while data URL loads */
+                    <svg
+                      viewBox="0 0 33 33"
+                      className="w-full h-full"
+                      shapeRendering="crispEdges"
+                      fill="currentColor"
+                    >
+                      <path d="M0,0 h7 v7 h-7 z M1,1 v5 h5 v-5 z M2,2 h3 v3 h-3 z" />
+                      <path d="M26,0 h7 v7 h-7 z M27,1 v5 h5 v-5 z M28,2 h3 v3 h-3 z" />
+                      <path d="M0,26 h7 v7 h-7 z M1,27 v5 h5 v-5 z M2,28 h3 v3 h-3 z" />
+                      <rect x="9" y="1" width="2" height="2" />
+                      <rect x="13" y="1" width="3" height="1" />
+                      <rect x="18" y="2" width="2" height="3" />
+                      <rect x="22" y="1" width="2" height="2" />
+                      <rect x="9" y="5" width="4" height="2" />
+                      <rect x="15" y="6" width="3" height="3" />
+                      <rect x="20" y="5" width="2" height="2" />
+                      <rect x="9" y="9" width="3" height="3" />
+                      <rect x="14" y="11" width="5" height="2" />
+                      <rect x="21" y="9" width="3" height="4" />
+                      <rect x="26" y="9" width="4" height="2" />
+                      <rect x="2" y="10" width="3" height="2" />
+                      <rect x="1" y="14" width="4" height="3" />
+                      <rect x="7" y="14" width="3" height="2" />
+                      <rect x="12" y="15" width="3" height="4" />
+                      <rect x="17" y="15" width="4" height="3" />
+                      <rect x="23" y="15" width="2" height="3" />
+                      <rect x="27" y="13" width="5" height="3" />
+                      <rect x="2" y="19" width="4" height="2" />
+                      <rect x="8" y="18" width="2" height="4" />
+                      <rect x="12" y="21" width="5" height="2" />
+                      <rect x="19" y="20" width="3" height="4" />
+                      <rect x="24" y="20" width="3" height="2" />
+                      <rect x="29" y="18" width="3" height="3" />
+                      <rect x="9" y="25" width="3" height="3" />
+                      <rect x="14" y="25" width="4" height="2" />
+                      <rect x="20" y="26" width="3" height="3" />
+                    </svg>
+                  )}
                 </div>
               )}
 
               {/* 5. Barcode Box */}
               {el.type === 'barcode' && (
-                <div className="w-full h-full bg-white p-1 border border-slate-300 rounded flex flex-col items-center justify-between shadow-sm">
-                  {/* Simulated Code128 Vector Bars */}
+                <div className="w-full h-full bg-white p-1 border border-slate-300 rounded flex flex-col items-center justify-between shadow-xs">
                   <div className="w-full h-4/5 flex items-stretch justify-between px-1">
                     {[3, 1, 2, 1, 4, 1, 2, 3, 1, 2, 4, 1, 3, 2, 1, 2, 1, 3, 4, 1, 2, 3, 1, 2, 3, 1, 4, 2].map(
                       (weight, idx) => (
@@ -326,37 +419,52 @@ export default function CardCanvas({
                     )}
                   </div>
                   <span className="text-[6.5px] font-mono tracking-widest text-slate-700 font-semibold leading-none">
-                    {activeStudentData ? activeStudentData.admission_number : '*ADM-2026-001*'}
+                    {activeStudentData ? (activeStudentData.admission_number || activeStudentData.admissionNumber) : '*ADM-2026-001*'}
                   </span>
                 </div>
               )}
 
               {/* 6. Signature Box */}
-              {el.type === 'signature' && (
-                <div
-                  style={{
-                    borderColor: el.borderColor || '#94a3b8',
-                    borderWidth: el.borderWidth ? `${el.borderWidth}px` : 1,
-                    borderRadius: el.borderRadius ? `${el.borderRadius * 2}px` : 2,
-                  }}
-                  className="w-full h-full border-dashed bg-slate-50/60 p-1 flex flex-col justify-end items-center relative overflow-hidden"
-                >
-                  {activeStudentData?.signature_url || activeStudentData?.signatureUrl ? (
-                    <img
-                      src={activeStudentData.signature_url || activeStudentData.signatureUrl}
-                      alt="Signature"
-                      className="max-h-[60%] max-w-[90%] object-contain mb-0.5"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  ) : null}
-                  <div className="w-4/5 border-t border-slate-400 mb-0.5" />
-                  <span className="text-[6.5px] font-medium text-slate-500 uppercase tracking-wider text-center leading-none">
-                    {activeStudentData?.principal_name || el.label || 'Principal Signature'}
-                  </span>
-                </div>
-              )}
+              {el.type === 'signature' && (() => {
+                const signSrc = getSignatureSrc();
+                return (
+                  <div
+                    style={{
+                      borderColor: el.borderColor || '#94a3b8',
+                      borderWidth: el.borderWidth ? `${el.borderWidth}px` : 1,
+                      borderRadius: el.borderRadius ? `${el.borderRadius * scale}px` : 2,
+                    }}
+                    className="w-full h-full border-dashed bg-slate-50/60 p-1 flex flex-col justify-end items-center relative overflow-hidden"
+                  >
+                    {signSrc ? (
+                      <img
+                        src={signSrc}
+                        alt="Signature"
+                        className="max-h-[60%] max-w-[90%] object-contain mb-0.5"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      /* Styled Vector Signature */
+                      <svg
+                        className="max-h-[50%] max-w-[85%] mb-0.5 text-indigo-900"
+                        viewBox="0 0 160 40"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      >
+                        <path d="M10,25 Q35,5 50,22 T90,20 T130,28 T150,15" />
+                      </svg>
+                    )}
+                    <div className="w-4/5 border-t border-slate-400 mb-0.5" />
+                    <span className="text-[6.5px] font-medium text-slate-500 uppercase tracking-wider text-center leading-none">
+                      {activeStudentData?.principal_name || el.label || 'Principal Signature'}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           );
         })}

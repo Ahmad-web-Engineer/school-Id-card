@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { extractArray, extractPagination } from '../../services/responseUtils';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -48,20 +49,20 @@ export default function AgencyDispatchPage() {
       }),
   });
 
-  const dispatches = dispatchesRes?.data?.data || [];
-  const pagination = dispatchesRes?.data?.pagination || { page: 0, size: 10, totalElements: 0, totalPages: 0 };
+  const dispatches = extractArray(dispatchesRes);
+  const pagination = extractPagination(dispatchesRes, dispatches.length);
 
   // 2. Fetch assigned jobs to populate Dispatch button selector
   const { data: jobsRes } = useQuery({
     queryKey: ['agency-jobs-for-dispatch'],
     queryFn: async () => {
       const res = await api.get('/agency/jobs?size=50');
-      return res.data?.data?.data || [];
+      return extractArray(res);
     },
   });
 
   const activeJobs = (jobsRes || []).filter(
-    (j) => j.assignmentStatus === 'IN_PRODUCTION' || j.assignmentStatus === 'AGENCY_ACCEPTED' || j.assignmentStatus === 'PRINTING_COMPLETED'
+    (j) => ['ASSIGNED', 'AGENCY_ACCEPTED', 'IN_PRODUCTION', 'PRINTING_COMPLETED', 'COMPLETED'].includes(j.assignmentStatus)
   );
 
   // 3. Create Dispatch Mutation
@@ -117,7 +118,7 @@ export default function AgencyDispatchPage() {
               </option>
               {activeJobs.map((j) => (
                 <option key={j.id} value={j.id}>
-                  {j.assignmentNumber || j.jobNumber} ({j.assignedQuantity || j.quantity} cards)
+                  {j.jobNumber || j.assignmentNumber} ({j.totalQuantity || j.assignedQuantity || 0} cards) [{j.assignmentStatus}]
                 </option>
               ))}
             </select>

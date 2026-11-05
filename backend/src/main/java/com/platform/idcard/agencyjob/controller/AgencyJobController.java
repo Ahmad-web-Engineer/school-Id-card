@@ -13,6 +13,8 @@ import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -76,5 +78,85 @@ public class AgencyJobController {
         UUID userId = SecurityUtils.getCurrentUserId();
         AgencyJobDetailResponse response = agencyJobService.rejectJob(id, agencyId, userId, request);
         return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    @GetMapping("/{id}/print-pdf")
+    @Operation(summary = "Download print-ready cards PDF", description = "Generates high-resolution multi-page PDF with student cards for printing")
+    public ResponseEntity<byte[]> downloadJobPrintPdf(@PathVariable UUID id) {
+        UUID agencyId = SecurityUtils.getRequiredAgencyId();
+        byte[] pdfBytes = agencyJobService.renderJobCardsPdf(id, agencyId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"job_cards_" + id + ".pdf\"")
+                .body(pdfBytes);
+    }
+
+    @GetMapping("/{id}/students/{studentId}/print-pdf")
+    @Operation(summary = "Download single student ID card PDF", description = "Generates print-ready 2-page PDF for a specific student")
+    public ResponseEntity<byte[]> downloadJobStudentPrintPdf(@PathVariable UUID id, @PathVariable UUID studentId) {
+        UUID agencyId = SecurityUtils.getRequiredAgencyId();
+        byte[] pdfBytes = agencyJobService.renderJobSingleStudentPdf(id, studentId, agencyId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"card_" + studentId + ".pdf\"")
+                .body(pdfBytes);
+    }
+
+    @GetMapping("/{id}/print-a4-sheet")
+    @Operation(summary = "Download A4 imposition sheet PDF", description = "Generates multi-page A4 imposition sheet PDF with duplex column mirroring for production printing")
+    public ResponseEntity<byte[]> downloadJobA4SheetPdf(@PathVariable UUID id) {
+        UUID agencyId = SecurityUtils.getRequiredAgencyId();
+        AgencyJobDetailResponse detail = agencyJobService.getAgencyJobById(id, agencyId);
+        byte[] pdfBytes = agencyJobService.renderJobA4SheetPdf(id, agencyId);
+        String filename = "job_" + detail.jobNumber() + "_a4_sheet.pdf";
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(pdfBytes);
+    }
+
+    @GetMapping("/{id}/print-a4-image")
+    @Operation(summary = "Download A4 imposition sheet JPEG", description = "Generates high-resolution 300 DPI A4 imposition sheet JPEG image with crop marks and duplex layout")
+    public ResponseEntity<byte[]> downloadJobA4SheetImage(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "front") String side
+    ) {
+        UUID agencyId = SecurityUtils.getRequiredAgencyId();
+        AgencyJobDetailResponse detail = agencyJobService.getAgencyJobById(id, agencyId);
+        byte[] imageBytes = agencyJobService.renderJobA4SheetImage(id, agencyId, side);
+        String filename = "job_" + detail.jobNumber() + "_a4_" + (side != null ? side.toLowerCase() : "front") + ".jpg";
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(imageBytes);
+    }
+
+    @GetMapping("/{id}/download-images")
+    @Operation(summary = "Download high-resolution JPEG images ZIP", description = "Exports 300 DPI JPEG cards in a zip archive")
+    public ResponseEntity<byte[]> downloadJobImagesZip(@PathVariable UUID id) {
+        UUID agencyId = SecurityUtils.getRequiredAgencyId();
+        AgencyJobDetailResponse detail = agencyJobService.getAgencyJobById(id, agencyId);
+        byte[] zipBytes = agencyJobService.renderJobImagesZip(id, agencyId);
+        String filename = "job_" + detail.jobNumber() + "_cards_jpeg.zip";
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(zipBytes);
+    }
+
+    @GetMapping("/{id}/students/{studentId}/download-image")
+    @Operation(summary = "Download single student card JPEG", description = "Exports single student card side as 300 DPI JPEG")
+    public ResponseEntity<byte[]> downloadJobStudentImage(
+            @PathVariable UUID id,
+            @PathVariable UUID studentId,
+            @RequestParam(defaultValue = "front") String side
+    ) {
+        UUID agencyId = SecurityUtils.getRequiredAgencyId();
+        byte[] imageBytes = agencyJobService.renderJobSingleStudentImage(id, studentId, agencyId, side);
+        String filename = "card_" + studentId + "_" + (side != null ? side.toLowerCase() : "front") + ".jpg";
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(imageBytes);
     }
 }

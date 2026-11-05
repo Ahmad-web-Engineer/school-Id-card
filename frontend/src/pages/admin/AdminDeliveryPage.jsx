@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { extractArray, extractPagination } from '../../services/responseUtils';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -60,8 +61,8 @@ export default function AdminDeliveryPage() {
       }),
   });
 
-  const dispatches = dispatchesRes?.data?.data || [];
-  const dispatchPagination = dispatchesRes?.data?.pagination || { page: 0, size: 10, totalElements: 0, totalPages: 0 };
+  const dispatches = extractArray(dispatchesRes);
+  const dispatchPagination = extractPagination(dispatchesRes, dispatches.length);
 
   // 2. Fetch Global Deliveries
   const {
@@ -82,8 +83,8 @@ export default function AdminDeliveryPage() {
       }),
   });
 
-  const deliveries = deliveriesRes?.data?.data || [];
-  const deliveryPagination = deliveriesRes?.data?.pagination || { page: 0, size: 10, totalElements: 0, totalPages: 0 };
+  const deliveries = extractArray(deliveriesRes);
+  const deliveryPagination = extractPagination(deliveriesRes, deliveries.length);
 
   // 3. Receive at Hub Mutation (Model B)
   const receiveHubMutation = useMutation({

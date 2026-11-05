@@ -15,7 +15,7 @@ export default function CreateDispatchModal({ isOpen, onClose, assignment, onSub
 
   useEffect(() => {
     if (assignment) {
-      setDispatchQuantity(assignment.assignedQuantity || 1);
+      setDispatchQuantity(assignment.totalQuantity || assignment.assignedQuantity || 1);
     }
   }, [assignment]);
 

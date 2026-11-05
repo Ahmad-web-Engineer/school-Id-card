@@ -21,8 +21,17 @@ import {
   FileText,
   Layers,
   Info,
-  Package
+  Package,
+  Download,
+  Search,
+  Eye,
+  LayoutGrid,
+  List,
+  User,
+  Image as ImageIcon,
 } from 'lucide-react';
+import SingleCardPreviewModal from '../../features/templates/SingleCardPreviewModal';
+import { directPrintUrl } from '../../utils/printHelper';
 
 export default function AgencyJobDetailPage() {
   const { id } = useParams();
@@ -32,8 +41,191 @@ export default function AgencyJobDetailPage() {
   const [isAcceptModalOpen, setIsAcceptModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [isDownloadingA4, setIsDownloadingA4] = useState(false);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+  const [isDirectPrinting, setIsDirectPrinting] = useState(null); // 'a4' | 'cards' | null
   const [actionError, setActionError] = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
+
+  // Student Cards Gallery / Inspection State
+  const [studentSearch, setStudentSearch] = useState('');
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'table'
+  const [selectedPreviewStudent, setSelectedPreviewStudent] = useState(null);
+  const [downloadingStudentId, setDownloadingStudentId] = useState(null);
+  const [directPrintingStudentId, setDirectPrintingStudentId] = useState(null);
+  const [downloadingImageStudentId, setDownloadingImageStudentId] = useState(null);
+  const [isDownloadingA4Jpg, setIsDownloadingA4Jpg] = useState(false);
+
+  // Direct Print Handlers
+  const handleDirectPrintA4 = async () => {
+    try {
+      setIsDirectPrinting('a4');
+      setActionError(null);
+      await directPrintUrl(`/agency/jobs/${id}/print-a4-sheet`);
+      setActionSuccess('Sent A4 imposition sheet layout to printer.');
+    } catch (err) {
+      setActionError('Failed to trigger direct print for A4 sheet.');
+    } finally {
+      setIsDirectPrinting(null);
+    }
+  };
+
+  const handleDirectPrintCards = async () => {
+    try {
+      setIsDirectPrinting('cards');
+      setActionError(null);
+      await directPrintUrl(`/agency/jobs/${id}/print-pdf`);
+      setActionSuccess('Sent ID cards layout to printer.');
+    } catch (err) {
+      setActionError('Failed to trigger direct print for cards.');
+    } finally {
+      setIsDirectPrinting(null);
+    }
+  };
+
+  const handleDirectPrintSingleStudent = async (student) => {
+    const studentId = student.studentId || student.id;
+    try {
+      setDirectPrintingStudentId(studentId);
+      setActionError(null);
+      await directPrintUrl(`/agency/jobs/${id}/students/${studentId}/print-pdf`);
+      setActionSuccess(`Sent card for ${student.studentName} to printer.`);
+    } catch (err) {
+      setActionError('Failed to print single card.');
+    } finally {
+      setDirectPrintingStudentId(null);
+    }
+  };
+
+  // Download Handlers
+  const handleDownloadPdf = async () => {
+    try {
+      setIsDownloadingPdf(true);
+      setActionError(null);
+      const res = await api.get(`/agency/jobs/${id}/print-pdf`, { responseType: 'blob' });
+      const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${job.jobNumber || 'job'}_cards_print_ready.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to generate print-ready card PDF.');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
+  const handleDownloadA4 = async () => {
+    try {
+      setIsDownloadingA4(true);
+      setActionError(null);
+      const res = await api.get(`/agency/jobs/${id}/print-a4-sheet`, { responseType: 'blob' });
+      const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${job.jobNumber || 'job'}_a4_sheet.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to generate A4 imposition sheet PDF.');
+    } finally {
+      setIsDownloadingA4(false);
+    }
+  };
+
+  const handleDownloadA4Jpg = async (side = 'front') => {
+    try {
+      setIsDownloadingA4Jpg(true);
+      setActionError(null);
+      const res = await api.get(`/agency/jobs/${id}/print-a4-image?side=${side}`, { responseType: 'blob' });
+      const blob = res instanceof Blob ? res : new Blob([res], { type: 'image/jpeg' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${job.jobNumber || 'job'}_a4_sheet_${side}.jpg`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to download A4 sheet JPEG image.');
+    } finally {
+      setIsDownloadingA4Jpg(false);
+    }
+  };
+
+  const handleDownloadImagesZip = async () => {
+    try {
+      setIsDownloadingZip(true);
+      setActionError(null);
+      const res = await api.get(`/agency/jobs/${id}/download-images`, { responseType: 'blob' });
+      const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${job.jobNumber || 'job'}_cards_jpeg.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to generate high-resolution JPEG ZIP archive.');
+    } finally {
+      setIsDownloadingZip(false);
+    }
+  };
+
+  const handleDownloadSinglePdf = async (student) => {
+    const studentId = student.studentId || student.id;
+    try {
+      setDownloadingStudentId(studentId);
+      setActionError(null);
+      const res = await api.get(`/agency/jobs/${id}/students/${studentId}/print-pdf`, { responseType: 'blob' });
+      const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `card_${student.admissionNumber || studentId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to generate single student ID card PDF.');
+    } finally {
+      setDownloadingStudentId(null);
+    }
+  };
+
+  const handleDownloadSingleImage = async (student, side = 'front') => {
+    const studentId = student.studentId || student.id;
+    try {
+      setDownloadingImageStudentId(studentId);
+      setActionError(null);
+      const res = await api.get(`/agency/jobs/${id}/students/${studentId}/download-image?side=${side}`, { responseType: 'blob' });
+      const blob = res instanceof Blob ? res : new Blob([res], { type: 'image/jpeg' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${student.admissionNumber || studentId}_${side}.jpg`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError('Failed to download student JPEG image.');
+    } finally {
+      setDownloadingImageStudentId(null);
+    }
+  };
 
   // 1. Fetch Job Details
   const {
@@ -135,28 +327,131 @@ export default function AgencyJobDetailPage() {
           </div>
         </div>
 
-        {/* Action Buttons */}
-        {job.assignmentStatus === 'ASSIGNED' && (
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-rose-600 border-rose-200 hover:bg-rose-50"
-              onClick={() => setIsRejectModalOpen(true)}
-            >
-              <XCircle className="h-4 w-4 mr-1.5" />
-              Reject Job
-            </Button>
-            <Button
-              size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={() => setIsAcceptModalOpen(true)}
-            >
-              <CheckCircle2 className="h-4 w-4 mr-1.5" />
-              Accept Job
-            </Button>
-          </div>
-        )}
+        {/* Action Buttons: Direct Print & Export Options */}
+        <div className="flex flex-wrap items-center gap-2">
+          {job.assignmentStatus !== 'REJECTED' && (
+            <>
+              {/* Direct Print Actions */}
+              <Button
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 shadow-xs"
+                onClick={handleDirectPrintA4}
+                disabled={isDirectPrinting === 'a4'}
+                title="Send A4 Imposition Sheet (Grid Layout) directly to printer dialog"
+              >
+                {isDirectPrinting === 'a4' ? (
+                  <LoadingSpinner size="xs" />
+                ) : (
+                  <Printer className="h-4 w-4" />
+                )}
+                Direct Print (A4 Sheet)
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 flex items-center gap-1.5"
+                onClick={handleDirectPrintCards}
+                disabled={isDirectPrinting === 'cards'}
+                title="Send individual CR80 ID cards directly to card printer dialog"
+              >
+                {isDirectPrinting === 'cards' ? (
+                  <LoadingSpinner size="xs" />
+                ) : (
+                  <Printer className="h-4 w-4 text-indigo-600" />
+                )}
+                Direct Print (Cards)
+              </Button>
+
+              {/* Download File Options */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
+                onClick={handleDownloadA4}
+                disabled={isDownloadingA4}
+                title="Download A4 Grid Layout PDF with duplex alignment and crop marks"
+              >
+                {isDownloadingA4 ? (
+                  <LoadingSpinner size="xs" />
+                ) : (
+                  <FileText className="h-4 w-4 text-indigo-600" />
+                )}
+                A4 PDF Sheet
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
+                onClick={() => handleDownloadA4Jpg('front')}
+                disabled={isDownloadingA4Jpg}
+                title="Download A4 Imposition Sheet as 300 DPI high-resolution JPEG image"
+              >
+                {isDownloadingA4Jpg ? (
+                  <LoadingSpinner size="xs" />
+                ) : (
+                  <Download className="h-4 w-4 text-emerald-600" />
+                )}
+                A4 JPEG Sheet
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
+                onClick={handleDownloadPdf}
+                disabled={isDownloadingPdf}
+                title="Download CR80 Individual Cards multi-page PDF"
+              >
+                {isDownloadingPdf ? (
+                  <LoadingSpinner size="xs" />
+                ) : (
+                  <Download className="h-4 w-4 text-indigo-600" />
+                )}
+                Cards PDF
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
+                onClick={handleDownloadImagesZip}
+                disabled={isDownloadingZip}
+                title="Download 300 DPI High-Resolution Front & Back JPEGs in a ZIP archive"
+              >
+                {isDownloadingZip ? (
+                  <LoadingSpinner size="xs" />
+                ) : (
+                  <ImageIcon className="h-4 w-4 text-emerald-600" />
+                )}
+                JPEGs (ZIP)
+              </Button>
+            </>
+          )}
+
+          {job.assignmentStatus === 'ASSIGNED' && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-rose-600 border-rose-200 hover:bg-rose-50"
+                onClick={() => setIsRejectModalOpen(true)}
+              >
+                <XCircle className="h-4 w-4 mr-1.5" />
+                Reject Job
+              </Button>
+              <Button
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => setIsAcceptModalOpen(true)}
+              >
+                <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                Accept Job
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {actionSuccess && (
@@ -327,6 +622,310 @@ export default function AgencyJobDetailPage() {
         </div>
       </div>
 
+      {/* Student ID Cards & Print Proofs Gallery / Roster */}
+      <Card className="p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Printer className="h-4 w-4 text-indigo-600" />
+              Student ID Cards & Print Proofs ({job.students?.length || 0})
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Inspect double-sided proofs, verify student data accuracy, or print individual replacement cards.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`p-1.5 rounded-md text-xs transition-colors ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-indigo-600 shadow-xs font-semibold'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Grid Gallery View"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`p-1.5 rounded-md text-xs transition-colors ${
+                  viewMode === 'table'
+                    ? 'bg-white text-indigo-600 shadow-xs font-semibold'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="List Table View"
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative max-w-md">
+          <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search students by name, admission number, roll no, class..."
+            value={studentSearch}
+            onChange={(e) => setStudentSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        {/* View Mode: Grid Gallery */}
+        {viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {((job.students || []).filter((s) => {
+              if (!studentSearch.trim()) return true;
+              const q = studentSearch.toLowerCase();
+              return (
+                (s.studentName || '').toLowerCase().includes(q) ||
+                (s.admissionNumber || '').toLowerCase().includes(q) ||
+                (s.className || '').toLowerCase().includes(q) ||
+                (s.rollNumber || '').toLowerCase().includes(q)
+              );
+            })).length === 0 ? (
+              <div className="col-span-full py-8 text-center text-slate-400 text-xs">
+                No student ID cards found matching your search.
+              </div>
+            ) : (
+              (job.students || [])
+                .filter((s) => {
+                  if (!studentSearch.trim()) return true;
+                  const q = studentSearch.toLowerCase();
+                  return (
+                    (s.studentName || '').toLowerCase().includes(q) ||
+                    (s.admissionNumber || '').toLowerCase().includes(q) ||
+                    (s.className || '').toLowerCase().includes(q) ||
+                    (s.rollNumber || '').toLowerCase().includes(q)
+                  );
+                })
+                .map((s) => (
+                  <div
+                    key={s.id || s.studentId || s.admissionNumber}
+                    className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-3.5 hover:shadow-md transition-all flex flex-col justify-between"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-12 h-14 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-indigo-700 text-sm overflow-hidden shrink-0 shadow-xs">
+                        {s.photoFileId ? (
+                          <img
+                            src={`/api/v1/files/${s.photoFileId}/download`}
+                            alt={s.studentName}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          (s.studentName || 'S').charAt(0)
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-xs font-bold text-slate-900 truncate" title={s.studentName}>
+                          {s.studentName}
+                        </h4>
+                        <p className="text-[11px] font-mono text-indigo-600 font-semibold mt-0.5">
+                          {s.admissionNumber}
+                        </p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Class {s.className}-{s.section} {s.rollNumber ? `• Roll #${s.rollNumber}` : ''}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-slate-200/60 flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedPreviewStudent(s)}
+                        className="flex-1 text-[11px] py-1 h-7 flex items-center justify-center gap-1 text-indigo-700 bg-white hover:bg-indigo-50 border-indigo-200"
+                      >
+                        <Eye className="w-3 h-3" />
+                        Preview
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDirectPrintSingleStudent(s)}
+                        disabled={directPrintingStudentId === (s.studentId || s.id)}
+                        className="text-[11px] py-1 h-7 px-2 flex items-center justify-center text-indigo-600 bg-white hover:bg-indigo-50 border-indigo-200"
+                        title="Direct print single card to connected printer"
+                      >
+                        {directPrintingStudentId === (s.studentId || s.id) ? (
+                          <LoadingSpinner size="sm" />
+                        ) : (
+                          <Printer className="w-3 h-3" />
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDownloadSinglePdf(s)}
+                        disabled={downloadingStudentId === (s.studentId || s.id)}
+                        className="text-[11px] py-1 h-7 px-2 flex items-center justify-center text-slate-700 bg-white hover:bg-slate-100 border-slate-200"
+                        title="Download print-ready single student PDF"
+                      >
+                        {downloadingStudentId === (s.studentId || s.id) ? (
+                          <LoadingSpinner size="sm" />
+                        ) : (
+                          <Download className="w-3 h-3" />
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDownloadSingleImage(s, 'front')}
+                        disabled={downloadingImageStudentId === (s.studentId || s.id)}
+                        className="text-[11px] py-1 h-7 px-2 flex items-center justify-center text-emerald-600 bg-white hover:bg-emerald-50 border-emerald-200"
+                        title="Download Front High-Res JPEG"
+                      >
+                        {downloadingImageStudentId === (s.studentId || s.id) ? (
+                          <LoadingSpinner size="sm" />
+                        ) : (
+                          <ImageIcon className="w-3 h-3" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+        ) : (
+          /* View Mode: Table */
+          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
+              <thead className="bg-slate-50 text-slate-600 uppercase font-semibold text-[11px]">
+                <tr>
+                  <th className="py-2.5 px-3">Student</th>
+                  <th className="py-2.5 px-3">Admission No</th>
+                  <th className="py-2.5 px-3">Class & Section</th>
+                  <th className="py-2.5 px-3">Roll No</th>
+                  <th className="py-2.5 px-3">Blood Group</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {((job.students || []).filter((s) => {
+                  if (!studentSearch.trim()) return true;
+                  const q = studentSearch.toLowerCase();
+                  return (
+                    (s.studentName || '').toLowerCase().includes(q) ||
+                    (s.admissionNumber || '').toLowerCase().includes(q) ||
+                    (s.className || '').toLowerCase().includes(q) ||
+                    (s.rollNumber || '').toLowerCase().includes(q)
+                  );
+                })).length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-400 text-xs">
+                      No student ID cards found matching your search.
+                    </td>
+                  </tr>
+                ) : (
+                  (job.students || [])
+                    .filter((s) => {
+                      if (!studentSearch.trim()) return true;
+                      const q = studentSearch.toLowerCase();
+                      return (
+                        (s.studentName || '').toLowerCase().includes(q) ||
+                        (s.admissionNumber || '').toLowerCase().includes(q) ||
+                        (s.className || '').toLowerCase().includes(q) ||
+                        (s.rollNumber || '').toLowerCase().includes(q)
+                      );
+                    })
+                    .map((s) => (
+                      <tr key={s.id || s.studentId || s.admissionNumber} className="hover:bg-slate-50">
+                        <td className="py-2 px-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs overflow-hidden shrink-0">
+                              {s.photoFileId ? (
+                                <img
+                                  src={`/api/v1/files/${s.photoFileId}/download`}
+                                  alt={s.studentName}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                (s.studentName || 'S').charAt(0)
+                              )}
+                            </div>
+                            <span className="font-semibold text-slate-900">{s.studentName}</span>
+                          </div>
+                        </td>
+                        <td className="py-2 px-3 font-mono text-indigo-600 font-medium">{s.admissionNumber}</td>
+                        <td className="py-2 px-3 text-slate-700">{s.className}-{s.section}</td>
+                        <td className="py-2 px-3 font-mono text-slate-600">{s.rollNumber || '-'}</td>
+                        <td className="py-2 px-3 text-rose-600 font-medium">{s.bloodGroup || '-'}</td>
+                        <td className="py-2 px-3 text-right whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedPreviewStudent(s)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100"
+                            >
+                              <Eye className="w-3 h-3" />
+                              Preview
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDirectPrintSingleStudent(s)}
+                              disabled={directPrintingStudentId === (s.studentId || s.id)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100"
+                              title="Direct print single card to connected printer"
+                            >
+                              {directPrintingStudentId === (s.studentId || s.id) ? (
+                                <LoadingSpinner size="sm" />
+                              ) : (
+                                <Printer className="w-3 h-3" />
+                              )}
+                              Print
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadSinglePdf(s)}
+                              disabled={downloadingStudentId === (s.studentId || s.id)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-md hover:bg-slate-200"
+                              title="Download print-ready PDF"
+                            >
+                              {downloadingStudentId === (s.studentId || s.id) ? (
+                                <LoadingSpinner size="sm" />
+                              ) : (
+                                <Download className="w-3 h-3" />
+                              )}
+                              PDF
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadSingleImage(s, 'front')}
+                              disabled={downloadingImageStudentId === (s.studentId || s.id)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100"
+                              title="Download Front High-Res JPEG"
+                            >
+                              {downloadingImageStudentId === (s.studentId || s.id) ? (
+                                <LoadingSpinner size="sm" />
+                              ) : (
+                                <ImageIcon className="w-3 h-3" />
+                              )}
+                              JPEG
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
       {/* Accept Job Confirmation Modal */}
       <Modal
         isOpen={isAcceptModalOpen}
@@ -399,6 +998,21 @@ export default function AgencyJobDetailPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Single Card Proof Inspection Modal */}
+      {selectedPreviewStudent && (
+        <SingleCardPreviewModal
+          isOpen={!!selectedPreviewStudent}
+          onClose={() => setSelectedPreviewStudent(null)}
+          student={selectedPreviewStudent}
+          cardSpecs={specs}
+          jobId={id}
+          onDownloadPdf={handleDownloadSinglePdf}
+          isDownloadingPdf={downloadingStudentId === (selectedPreviewStudent?.studentId || selectedPreviewStudent?.id)}
+          onDirectPrint={handleDirectPrintSingleStudent}
+          onDownloadImage={handleDownloadSingleImage}
+        />
+      )}
     </div>
   );
 }

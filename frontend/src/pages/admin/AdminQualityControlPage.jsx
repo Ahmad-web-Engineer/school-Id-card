@@ -98,6 +98,19 @@ export default function AdminQualityControlPage() {
   });
   const assignments = extractArray(assignmentsRes);
 
+  const effectiveAssignmentId = selectedAssignmentId || assignments[0]?.id;
+
+  // Fetch full details of the chosen assignment (includes student cards and specs)
+  const { data: assignmentDetailRes } = useQuery({
+    queryKey: ['admin-assignment-detail-qc', effectiveAssignmentId],
+    queryFn: async () => {
+      if (!effectiveAssignmentId) return null;
+      const res = await api.get(`/admin/assignments/${effectiveAssignmentId}`);
+      return res.data?.data || null;
+    },
+    enabled: !!effectiveAssignmentId && isSubmitQcOpen,
+  });
+
   // 4. Submit Admin QC Mutation
   const submitAdminQcMutation = useMutation({
     mutationFn: async (payload) => {
@@ -607,10 +620,13 @@ export default function AdminQualityControlPage() {
         }}
         onSubmit={(payload) => submitAdminQcMutation.mutate(payload)}
         isSubmitting={submitAdminQcMutation.isPending}
-        maxQuantity={activeSelectedAssignment?.totalQuantity || 100}
+        maxQuantity={assignmentDetailRes?.totalAssignedQuantity || activeSelectedAssignment?.totalQuantity || 100}
         assignments={assignments}
-        selectedAssignmentId={selectedAssignmentId}
+        selectedAssignmentId={selectedAssignmentId || effectiveAssignmentId}
         onSelectAssignment={setSelectedAssignmentId}
+        assignment={assignmentDetailRes || activeSelectedAssignment}
+        students={assignmentDetailRes?.students}
+        cardSpecs={assignmentDetailRes?.specs}
       />
     </div>
   );
