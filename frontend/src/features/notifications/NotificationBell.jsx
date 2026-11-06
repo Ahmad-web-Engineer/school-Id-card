@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import api from '../../services/api';
 
+import { extractArray } from '../../services/responseUtils';
+
 export default function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
@@ -12,7 +14,8 @@ export default function NotificationBell() {
   const fetchUnreadCount = async () => {
     try {
       const res = await api.get('/notifications/unread-count');
-      setUnreadCount(res.data?.data?.unreadCount || 0);
+      const payload = res?.data !== undefined ? res.data : res;
+      setUnreadCount(payload?.unreadCount || payload?.data?.unreadCount || 0);
     } catch {
       // Ignore background notification count errors
     }
@@ -22,7 +25,8 @@ export default function NotificationBell() {
     try {
       setLoading(true);
       const res = await api.get('/notifications?size=15');
-      setNotifications(res.data?.data?.data || []);
+      const list = extractArray(res);
+      setNotifications(list);
     } catch {
       // Ignore
     } finally {

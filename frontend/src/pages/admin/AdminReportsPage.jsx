@@ -21,8 +21,8 @@ export default function AdminReportsPage() {
         api.get('/admin/reports/operational'),
         api.get('/admin/reports/financial'),
       ]);
-      setOpReport(opRes.data?.data || null);
-      setFinReport(finRes.data?.data || null);
+      setOpReport(opRes?.data !== undefined ? opRes.data : opRes);
+      setFinReport(finRes?.data !== undefined ? finRes.data : finRes);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load executive reports');
     } finally {

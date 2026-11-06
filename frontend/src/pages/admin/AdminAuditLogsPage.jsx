@@ -9,6 +9,7 @@ import Modal from '../../components/common/Modal';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import api from '../../services/api';
+import { extractArray } from '../../services/responseUtils';
 
 export default function AdminAuditLogsPage() {
   const [logs, setLogs] = useState([]);
@@ -27,7 +28,7 @@ export default function AdminAuditLogsPage() {
       if (entityFilter) query += `&entityType=${encodeURIComponent(entityFilter)}`;
 
       const res = await api.get(query);
-      setLogs(res.data?.data?.data || []);
+      setLogs(extractArray(res));
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load audit logs');
     } finally {

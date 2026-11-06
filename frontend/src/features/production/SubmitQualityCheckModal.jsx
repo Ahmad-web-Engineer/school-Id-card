@@ -4,6 +4,7 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Textarea from '../../components/common/Textarea';
 import Button from '../../components/common/Button';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 import SingleCardPreviewModal from '../templates/SingleCardPreviewModal';
 import StudentPhotoAvatar from '../students/StudentPhotoAvatar';
 import { DEFECT_CATEGORIES } from './productionConstants';
@@ -33,6 +34,7 @@ export default function SubmitQualityCheckModal({
   assignment = null,
   students: propStudents = null,
   cardSpecs: propCardSpecs = null,
+  isLoadingStudents = false,
 }) {
   // Derive effective active job/assignment data
   const activeData = job || assignment || assignments.find((a) => a.id === selectedAssignmentId);
@@ -286,7 +288,12 @@ export default function SubmitQualityCheckModal({
           </div>
 
           {/* Interactive Student Checklist Mode (When student snapshots are present) */}
-          {hasStudents ? (
+          {isLoadingStudents ? (
+            <div className="py-12 flex flex-col items-center justify-center space-y-2 bg-slate-50 border border-slate-200/80 rounded-xl text-slate-500">
+              <LoadingSpinner size="md" />
+              <span className="text-xs font-medium">Loading student cards for quality verification...</span>
+            </div>
+          ) : hasStudents ? (
             <div className="space-y-3">
               {/* Toolbar: Search + Quick Pass All Button */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
@@ -563,6 +570,7 @@ export default function SubmitQualityCheckModal({
           onClose={() => setPreviewingStudent(null)}
           student={previewingStudent}
           cardSpecs={cardSpecs}
+          jobId={activeData?.id}
         />
       )}
     </>

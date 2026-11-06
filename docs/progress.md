@@ -1492,6 +1492,46 @@
 
 ---
 
+## Step 10 & 11 Log: Prepress Imposition Control, Quality Inspection (QC) Overhaul & Portrait Card Fidelity
+
+### What Was Built
+1. **Commercial Prepress & Print Settings Engine (`PrintSettingsDto`, `PrintImpositionModal`):**
+   - Implemented granular prepress configuration for both Super Admin and Printing Agency:
+     - **Print Mode:** A4 Sheet Imposition (`SHEET`) vs Direct-to-Card Plastic Printer (`SINGLE_CARD` CR80).
+     - **Sides Selection:** Duplex (`DUPLEX`), Front Side Only (`FRONT_ONLY`), Back Side Only (`BACK_ONLY`).
+     - **Imposition Grid:** Custom columns ($1$ to $5$) and rows ($1$ to $6$) per A4 sheet (e.g. $3 \times 3 = 9$ cards for portrait, $2 \times 5 = 10$ cards for landscape).
+     - **Spacing & Offsets:** Configurable horizontal gap, vertical gap, and top/bottom/left/right margin offsets in millimeters ($0\text{ to }30\text{ mm}$).
+     - **Commercial Marks:** Toggleable cutting guides (dashed crop boxes) and solid corner crop tick marks.
+     - **Agency Override Permission:** Admin controls whether the printing agency can customize imposition settings or must strictly follow admin-defined specs (`allow_agency_override`).
+   - Database migration `V15__add_print_settings_and_agency_override.sql` adding `print_settings` JSONB and `allow_agency_override` boolean columns to `printing_orders` and `agency_assignments`.
+
+2. **Quality Control (QC) Visual Inspection Overhaul (`SubmitQualityCheckModal.jsx`):**
+   - Replaced blind numeric fallback inputs with an interactive, visual card-by-card inspection workflow:
+     - **Live Student Snapshot Hydration:** Fixed Axios response interceptor unwrapping bug (`res.data?.data` -> `extractArray`) across `AgencyQualityPage`, `AdminQualityControlPage`, `AgencyJobDetailPage`, `AgencyProductionPage`, and report views so real student records load reliably.
+     - **Card-by-Card Inspection:** Student list with search filter, class/section tags, individual Pass / Defect toggles, and defect reason note logging.
+     - **Interactive Preview & Direct Verification:** Operators can click any student to open `SingleCardPreviewModal`, previewing high-resolution front and back card renders, scannable QR codes, and barcodes before approving.
+     - **Batch Actions:** "Pass All Remaining" quick action and live inspected counter calculation.
+     - **Direct Access:** Integrated "Quality Check" button directly in `AgencyJobDetailPage` header for accepted and in-production assignments.
+
+3. **High-Fidelity CR80 Portrait Rendering & Layout Engine (`CardPdfRenderingService.java`):**
+   - **Dynamic Boundary Clamping:** Automatically detects portrait CR80 cards ($54 \times 85.6\text{ mm}$) and clamps element widths exceeding the printable canvas (`cardWidthMm - 2f`), preventing right-margin text cutoff and barcode clipping.
+   - **Off-Canvas Repositioning:** Automatically shifts elements configured with landscape horizontal coordinates (e.g., signature blocks at $x=57\text{ mm}$) to inside the portrait bounds.
+   - **Padding & Breathing Room:** Added protective clipping padding (`g2.clipRect(elX - 1, elY - 1, elW + 2, elH + 2)`) to eliminate glyph ascender/descender clipping on school titles and student names.
+   - **Title Collisions Eliminated:** Repositioned green subtitle "STUDENT IDENTITY CARD" ($y=2.2\text{ mm}$) and bold school title "Greenwood International School" ($y=5.8\text{ mm}$) so they render with crisp separation.
+   - **Vector Asset Fallbacks:** Reset demo school `logo_file_id` to NULL in `V16__update_portrait_card_templates_and_logo.sql` to trigger the crisp vector school emblem instead of misplaced test photo uploads.
+   - **Simulated Ink Signature:** Smooth cubic Bézier ink flourish container with principal signatory designation.
+
+### How It Was Verified
+- **Unit Test Suite:** `CardPdfRenderingServiceTest` — **14/14 tests passed** (`mvn test -Dtest=CardPdfRenderingServiceTest`).
+- **Frontend Production Build:** `npm --prefix frontend run build` — `vite build` completed cleanly in 6.72s with **0 errors**.
+- **Live Card Render Verification:**
+  - `abhay_front_v2.jpg`: Confirmed non-overlapping title, circular avatar, student details, scannable QR code, and Dr. Rajesh Verma signature.
+  - `abhay_back_v2.jpg`: Confirmed balanced vertical distribution, card rules, campus address, verification QR, and centered barcode with zero text cutoff.
+  - `aarav_front_v2.jpg`: Confirmed real student photo rendering and CR80 card proportions.
+- **REST Prepress API Verification:** Tested `GET /api/v1/agency/jobs/{id}/print-settings` and `PUT /api/v1/agency/jobs/{id}/print-settings` with role-based override authorization.
+
+---
+
 ## Questions & Blockers
 *None. All requirements successfully satisfied.*
 

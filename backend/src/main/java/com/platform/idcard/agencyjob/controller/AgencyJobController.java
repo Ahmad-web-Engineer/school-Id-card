@@ -7,6 +7,7 @@ import com.platform.idcard.agencyjob.service.AgencyJobService;
 import com.platform.idcard.auth.security.SecurityUtils;
 import com.platform.idcard.common.response.ApiResponse;
 import com.platform.idcard.common.response.PagedResponse;
+import com.platform.idcard.template.dto.PrintSettingsDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -99,6 +100,130 @@ public class AgencyJobController {
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"card_" + studentId + ".pdf\"")
+                .body(pdfBytes);
+    }
+
+    @GetMapping("/{id}/print-settings")
+    @Operation(summary = "Get job print layout settings", description = "Retrieves prepress imposition print settings and check if customization is authorized by Admin")
+    public ResponseEntity<ApiResponse<PrintSettingsDto>> getJobPrintSettings(@PathVariable UUID id) {
+        UUID agencyId = SecurityUtils.getRequiredAgencyId();
+        PrintSettingsDto settings = agencyJobService.getAgencyPrintSettings(id, agencyId);
+        return ResponseEntity.ok(ApiResponse.ok(settings));
+    }
+
+    @PutMapping("/{id}/print-settings")
+    @Operation(summary = "Update job print layout settings", description = "Updates imposition print settings. Denied if Admin has locked settings for this job.")
+    public ResponseEntity<ApiResponse<PrintSettingsDto>> updateJobPrintSettings(
+            @PathVariable UUID id,
+            @RequestBody PrintSettingsDto settings
+    ) {
+        UUID agencyId = SecurityUtils.getRequiredAgencyId();
+        PrintSettingsDto saved = agencyJobService.updateAgencyPrintSettings(id, agencyId, settings);
+        return ResponseEntity.ok(ApiResponse.ok(saved));
+    }
+
+    @GetMapping("/{id}/print-sheet-pdf")
+    @Operation(summary = "Download custom imposition sheet PDF", description = "Generates multi-page imposition sheet PDF (A4, A3, Letter) with configurable grid, spacing, and duplex column mirroring")
+    public ResponseEntity<byte[]> downloadJobCustomSheetPdf(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String paperSize,
+            @RequestParam(required = false) Integer columns,
+            @RequestParam(required = false) Integer rows,
+            @RequestParam(required = false) Double horizontalSpacingMm,
+            @RequestParam(required = false) Double verticalSpacingMm,
+            @RequestParam(required = false) String sides,
+            @RequestParam(required = false) String printMode,
+            @RequestParam(required = false) Boolean showCropMarks,
+            @RequestParam(required = false) Boolean showCutGuides,
+            @RequestParam(required = false) Boolean autoCenter
+    ) {
+        UUID agencyId = SecurityUtils.getRequiredAgencyId();
+        AgencyJobDetailResponse detail = agencyJobService.getAgencyJobById(id, agencyId);
+
+        PrintSettingsDto override = null;
+        if (paperSize != null || columns != null || rows != null || horizontalSpacingMm != null || sides != null || printMode != null) {
+            override = new PrintSettingsDto(
+                    printMode != null ? printMode : PrintSettingsDto.MODE_SHEET,
+                    paperSize != null ? paperSize : PrintSettingsDto.PAPER_A4,
+                    sides != null ? sides : PrintSettingsDto.SIDES_DUPLEX,
+                    columns,
+                    rows,
+                    horizontalSpacingMm != null ? horizontalSpacingMm : 2.0,
+                    verticalSpacingMm != null ? verticalSpacingMm : 2.0,
+                    10.0, 10.0, 10.0, 10.0,
+                    autoCenter != null ? autoCenter : true,
+                    showCropMarks != null ? showCropMarks : true,
+                    showCutGuides != null ? showCutGuides : true,
+                    false
+            );
+        }
+
+        byte[] pdfBytes = agencyJobService.renderJobCustomImpositionPdf(id, agencyId, override);
+        String filename = "job_" + detail.jobNumber() + "_sheet.pdf";
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(pdfBytes);
+    }
+
+    @GetMapping("/{id}/print-sheet-image")
+    @Operation(summary = "Download custom imposition sheet JPEG", description = "Generates high-resolution 300 DPI imposition sheet JPEG image with custom grid, spacing, and crop marks")
+    public ResponseEntity<byte[]> downloadJobCustomSheetImage(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "front") String side,
+            @RequestParam(required = false) String paperSize,
+            @RequestParam(required = false) Integer columns,
+            @RequestParam(required = false) Integer rows,
+            @RequestParam(required = false) Double horizontalSpacingMm,
+            @RequestParam(required = false) Double verticalSpacingMm,
+            @RequestParam(required = false) String sides,
+            @RequestParam(required = false) String printMode,
+            @RequestParam(required = false) Boolean showCropMarks,
+            @RequestParam(required = false) Boolean showCutGuides,
+            @RequestParam(required = false) Boolean autoCenter
+    ) {
+        UUID agencyId = SecurityUtils.getRequiredAgencyId();
+        AgencyJobDetailResponse detail = agencyJobService.getAgencyJobById(id, agencyId);
+
+        PrintSettingsDto override = null;
+        if (paperSize != null || columns != null || rows != null || horizontalSpacingMm != null || sides != null || printMode != null) {
+            override = new PrintSettingsDto(
+                    printMode != null ? printMode : PrintSettingsDto.MODE_SHEET,
+                    paperSize != null ? paperSize : PrintSettingsDto.PAPER_A4,
+                    sides != null ? sides : PrintSettingsDto.SIDES_DUPLEX,
+                    columns,
+                    rows,
+                    horizontalSpacingMm != null ? horizontalSpacingMm : 2.0,
+                    verticalSpacingMm != null ? verticalSpacingMm : 2.0,
+                    10.0, 10.0, 10.0, 10.0,
+                    autoCenter != null ? autoCenter : true,
+                    showCropMarks != null ? showCropMarks : true,
+                    showCutGuides != null ? showCutGuides : true,
+                    false
+            );
+        }
+
+        byte[] imageBytes = agencyJobService.renderJobCustomImpositionImage(id, agencyId, side, override);
+        String filename = "job_" + detail.jobNumber() + "_sheet_" + (side != null ? side.toLowerCase() : "front") + ".jpg";
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(imageBytes);
+    }
+
+    @GetMapping("/{id}/print-plastic-pdf")
+    @Operation(summary = "Download direct plastic card PDF", description = "Generates print-ready PDF for CR80 PVC thermal card printers (1 card per page)")
+    public ResponseEntity<byte[]> downloadJobPlasticCardsPdf(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "DUPLEX") String sides
+    ) {
+        UUID agencyId = SecurityUtils.getRequiredAgencyId();
+        AgencyJobDetailResponse detail = agencyJobService.getAgencyJobById(id, agencyId);
+        byte[] pdfBytes = agencyJobService.renderJobPlasticCardsPdf(id, agencyId, sides);
+        String filename = "job_" + detail.jobNumber() + "_plastic_cr80.pdf";
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
                 .body(pdfBytes);
     }
 

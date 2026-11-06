@@ -15,7 +15,7 @@ export default function AgencyPerformancePage() {
       setLoading(true);
       setError(null);
       const res = await api.get('/agency/reports/performance');
-      setPerf(res.data?.data || null);
+      setPerf(res?.data !== undefined ? res.data : res);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load agency performance analytics');
     } finally {

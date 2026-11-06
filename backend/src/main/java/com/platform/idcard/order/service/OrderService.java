@@ -1,5 +1,7 @@
 package com.platform.idcard.order.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.platform.idcard.template.dto.PrintSettingsDto;
 import com.platform.idcard.common.exception.ApiException;
 import com.platform.idcard.common.exception.ErrorCode;
 import com.platform.idcard.common.exception.ResourceNotFoundException;
@@ -46,6 +48,7 @@ public class OrderService {
     private final CardTemplateRepository cardTemplateRepository;
     private final TemplateVersionRepository templateVersionRepository;
     private final CardPdfRenderingService cardPdfRenderingService;
+    private final ObjectMapper objectMapper;
 
     public OrderService(
             PrintingOrderRepository orderRepository,
@@ -57,7 +60,8 @@ public class OrderService {
             StudentRepository studentRepository,
             CardTemplateRepository cardTemplateRepository,
             TemplateVersionRepository templateVersionRepository,
-            CardPdfRenderingService cardPdfRenderingService
+            CardPdfRenderingService cardPdfRenderingService,
+            ObjectMapper objectMapper
     ) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
@@ -69,6 +73,7 @@ public class OrderService {
         this.cardTemplateRepository = cardTemplateRepository;
         this.templateVersionRepository = templateVersionRepository;
         this.cardPdfRenderingService = cardPdfRenderingService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -749,6 +754,85 @@ public class OrderService {
             students.add(s);
         }
         return new OrderRenderContext(template, version, students, school, session);
+    }
+
+    private PrintSettingsDto parsePrintSettings(String json, boolean isPortrait) {
+        if (json != null && !json.isBlank()) {
+            try {
+                PrintSettingsDto dto = objectMapper.readValue(json, PrintSettingsDto.class);
+                return dto.sanitize(isPortrait);
+            } catch (Exception e) {
+                // fall through to default
+            }
+        }
+        return PrintSettingsDto.defaultSettings(isPortrait);
+    }
+
+    @Transactional(readOnly = true)
+    public PrintSettingsDto getOrderPrintSettings(UUID orderId) {
+        PrintingOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
+        TemplateVersion tv = order.getTemplateVersion();
+        boolean isPortrait = tv == null || tv.getCardHeightMm() == null || tv.getCardWidthMm() == null ||
+                tv.getCardHeightMm().compareTo(tv.getCardWidthMm()) >= 0;
+        return parsePrintSettings(order.getPrintSettingsJson(), isPortrait);
+    }
+
+    @Transactional
+    public PrintSettingsDto updateOrderPrintSettings(UUID orderId, PrintSettingsDto settings) {
+        PrintingOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
+        TemplateVersion tv = order.getTemplateVersion();
+        boolean isPortrait = tv == null || tv.getCardHeightMm() == null || tv.getCardWidthMm() == null ||
+                tv.getCardHeightMm().compareTo(tv.getCardWidthMm()) >= 0;
+        PrintSettingsDto sanitized = (settings != null ? settings : PrintSettingsDto.defaultSettings(isPortrait)).sanitize(isPortrait);
+        try {
+            order.setPrintSettingsJson(objectMapper.writeValueAsString(sanitized));
+            orderRepository.save(order);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to persist order print settings: " + e.getMessage(), e);
+        }
+        return sanitized;
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderCustomImpositionPdf(UUID orderId, PrintSettingsDto overrideSettings) {
+        PrintingOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
+        OrderRenderContext ctx = loadOrderRenderContext(order);
+        boolean isPortrait = ctx.version() == null || ctx.version().getCardHeightMm() == null || ctx.version().getCardWidthMm() == null ||
+                ctx.version().getCardHeightMm().compareTo(ctx.version().getCardWidthMm()) >= 0;
+        PrintSettingsDto effectiveSettings = overrideSettings != null
+                ? overrideSettings.sanitize(isPortrait)
+                : parsePrintSettings(order.getPrintSettingsJson(), isPortrait);
+        return cardPdfRenderingService.renderCustomImpositionPdf(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session(), effectiveSettings);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderCustomImpositionImage(UUID orderId, String side, PrintSettingsDto overrideSettings) {
+        PrintingOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
+        OrderRenderContext ctx = loadOrderRenderContext(order);
+        boolean isPortrait = ctx.version() == null || ctx.version().getCardHeightMm() == null || ctx.version().getCardWidthMm() == null ||
+                ctx.version().getCardHeightMm().compareTo(ctx.version().getCardWidthMm()) >= 0;
+        PrintSettingsDto effectiveSettings = overrideSettings != null
+                ? overrideSettings.sanitize(isPortrait)
+                : parsePrintSettings(order.getPrintSettingsJson(), isPortrait);
+        return cardPdfRenderingService.renderCustomImpositionImage(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session(), side, effectiveSettings);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderPlasticCardsPdf(UUID orderId, String sides) {
+        PrintingOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
+        OrderRenderContext ctx = loadOrderRenderContext(order);
+        PrintSettingsDto plasticSettings = new PrintSettingsDto(
+                PrintSettingsDto.MODE_PLASTIC,
+                PrintSettingsDto.PAPER_CR80,
+                sides != null ? sides : PrintSettingsDto.SIDES_DUPLEX,
+                1, 1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, true, false, false, false
+        );
+        return cardPdfRenderingService.renderCustomImpositionPdf(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session(), plasticSettings);
     }
 
     @Transactional(readOnly = true)

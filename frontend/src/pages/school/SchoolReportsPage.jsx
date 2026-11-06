@@ -15,7 +15,7 @@ export default function SchoolReportsPage() {
       setLoading(true);
       setError(null);
       const res = await api.get('/school/reports/summary');
-      setReport(res.data?.data || null);
+      setReport(res?.data !== undefined ? res.data : res);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load school summary report');
     } finally {

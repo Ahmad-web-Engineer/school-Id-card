@@ -36,9 +36,11 @@ import {
   Printer,
   Download,
   Eye,
+  Sliders,
 } from 'lucide-react';
 import AssignAgencyModal from '../../features/assignments/AssignAgencyModal';
 import SingleCardPreviewModal from '../../features/templates/SingleCardPreviewModal';
+import PrintImpositionModal from '../../features/production/PrintImpositionModal';
 import { ASSIGNMENT_STATUSES } from '../../features/assignments/assignmentsConstants';
 import { directPrintUrl } from '../../utils/printHelper';
 
@@ -57,6 +59,7 @@ export default function AdminOrderDetailPage() {
 
   // Assignment Modal State
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [isImpositionModalOpen, setIsImpositionModalOpen] = useState(false);
 
   // Correction Modal State
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
@@ -507,10 +510,20 @@ export default function AdminOrderDetailPage() {
           )}
           {['APPROVED', 'AWAITING_ASSIGNMENT', 'ASSIGNED', 'IN_PRODUCTION', 'QUALITY_CHECK', 'DISPATCHED', 'DELIVERED', 'CLOSED'].includes(order.orderStatus) && (
             <>
-              {/* Direct Print Actions */}
+              {/* Prepress Studio & Direct Print Actions */}
               <Button
                 size="sm"
-                className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 shadow-xs"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 shadow-xs font-semibold"
+                onClick={() => setIsImpositionModalOpen(true)}
+                title="Open Prepress Imposition Studio to configure grid, gaps, margins, and bulk print"
+              >
+                <Sliders className="h-4 w-4" />
+                Prepress Print Studio
+              </Button>
+
+              <Button
+                size="sm"
+                className="bg-slate-800 hover:bg-slate-900 text-white flex items-center gap-1.5 shadow-xs"
                 onClick={handleDirectPrintA4}
                 disabled={isDirectPrinting === 'a4'}
                 title="Send A4 Imposition Sheet directly to printer dialog"
@@ -1127,6 +1140,24 @@ export default function AdminOrderDetailPage() {
             setActionSuccess('Order successfully assigned to agency!');
             queryClient.invalidateQueries({ queryKey: ['admin-order-detail', id] });
             queryClient.invalidateQueries({ queryKey: ['admin-order-assignments', id] });
+          }}
+        />
+      )}
+
+      {/* Prepress Imposition & Bulk Printing Studio */}
+      {order && (
+        <PrintImpositionModal
+          isOpen={isImpositionModalOpen}
+          onClose={() => setIsImpositionModalOpen(false)}
+          role="SUPER_ADMIN"
+          orderId={order.id}
+          identifierName={order.orderNumber || 'Order'}
+          totalStudents={order.students?.length || order.items?.reduce((acc, i) => acc + (i.quantity || 0), 0) || 1}
+          sampleStudent={order.students?.[0] || null}
+          initialSettings={order.printSettings || null}
+          allowAgencyOverride={false}
+          onSettingsUpdated={() => {
+            queryClient.invalidateQueries({ queryKey: ['admin-order-detail', id] });
           }}
         />
       )}

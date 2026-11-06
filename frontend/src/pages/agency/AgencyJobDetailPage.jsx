@@ -29,8 +29,13 @@ import {
   List,
   User,
   Image as ImageIcon,
+  Sliders,
+  ShieldCheck,
 } from 'lucide-react';
 import SingleCardPreviewModal from '../../features/templates/SingleCardPreviewModal';
+import PrintImpositionModal from '../../features/production/PrintImpositionModal';
+import SubmitQualityCheckModal from '../../features/production/SubmitQualityCheckModal';
+import { extractArray } from '../../services/responseUtils';
 import { directPrintUrl } from '../../utils/printHelper';
 
 export default function AgencyJobDetailPage() {
@@ -40,6 +45,8 @@ export default function AgencyJobDetailPage() {
 
   const [isAcceptModalOpen, setIsAcceptModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [isImpositionModalOpen, setIsImpositionModalOpen] = useState(false);
+  const [isQcModalOpen, setIsQcModalOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isDownloadingA4, setIsDownloadingA4] = useState(false);
@@ -271,6 +278,31 @@ export default function AgencyJobDetailPage() {
     },
   });
 
+  // Quality Checks for this job
+  const { data: jobQcReports = [] } = useQuery({
+    queryKey: ['agency-job-qc-reports', id],
+    queryFn: async () => {
+      const res = await api.get(`/agency/jobs/${id}/quality-checks`);
+      return extractArray(res);
+    },
+    enabled: !!id,
+  });
+
+  // Submit QC Mutation
+  const submitQcMutation = useMutation({
+    mutationFn: (payload) => api.post(`/agency/jobs/${id}/quality-checks`, payload),
+    onSuccess: () => {
+      setActionSuccess('Quality Inspection Report submitted successfully!');
+      setIsQcModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['agency-job-qc-reports', id] });
+      queryClient.invalidateQueries({ queryKey: ['agency-job-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['agency-qc-checks', id] });
+    },
+    onError: (err) => {
+      setActionError(err.message || 'Failed to submit quality check.');
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="py-24 flex justify-center">
@@ -332,10 +364,33 @@ export default function AgencyJobDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           {job.assignmentStatus !== 'REJECTED' && (
             <>
-              {/* Direct Print Actions */}
+              {/* Quality Inspection Button */}
+              {['AGENCY_ACCEPTED', 'IN_PRODUCTION', 'COMPLETED', 'DISPATCHED'].includes(job.assignmentStatus) && (
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-xs font-semibold"
+                  onClick={() => setIsQcModalOpen(true)}
+                  title="Perform quality check with visual card inspection & defect reporting"
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  Quality Check {jobQcReports.length > 0 && `(${jobQcReports.length})`}
+                </Button>
+              )}
+
+              {/* Prepress Studio & Direct Print Actions */}
               <Button
                 size="sm"
-                className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 shadow-xs"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 shadow-xs font-semibold"
+                onClick={() => setIsImpositionModalOpen(true)}
+                title="Open Prepress Imposition Studio for bulk printing and layout specs"
+              >
+                <Sliders className="h-4 w-4" />
+                Prepress Print Studio
+              </Button>
+
+              <Button
+                size="sm"
+                className="bg-slate-800 hover:bg-slate-900 text-white flex items-center gap-1.5 shadow-xs"
                 onClick={handleDirectPrintA4}
                 disabled={isDirectPrinting === 'a4'}
                 title="Send A4 Imposition Sheet (Grid Layout) directly to printer dialog"
@@ -1012,6 +1067,38 @@ export default function AgencyJobDetailPage() {
           isDownloadingPdf={downloadingStudentId === (selectedPreviewStudent?.studentId || selectedPreviewStudent?.id)}
           onDirectPrint={handleDirectPrintSingleStudent}
           onDownloadImage={handleDownloadSingleImage}
+        />
+      )}
+
+      {/* Prepress Imposition & Bulk Printing Studio */}
+      {job && (
+        <PrintImpositionModal
+          isOpen={isImpositionModalOpen}
+          onClose={() => setIsImpositionModalOpen(false)}
+          role="PRINTING_AGENCY"
+          jobId={job.id}
+          identifierName={job.jobNumber || 'Job'}
+          totalStudents={job.totalQuantity || job.students?.length || 1}
+          sampleStudent={job.students?.[0] || null}
+          initialSettings={job.printSettings || null}
+          allowAgencyOverride={job.allowAgencyOverride || false}
+          onSettingsUpdated={() => {
+            queryClient.invalidateQueries({ queryKey: ['agency-job-detail', id] });
+          }}
+        />
+      )}
+
+      {/* Submit Quality Check Modal */}
+      {job && (
+        <SubmitQualityCheckModal
+          isOpen={isQcModalOpen}
+          onClose={() => setIsQcModalOpen(false)}
+          onSubmit={(payload) => submitQcMutation.mutate(payload)}
+          isSubmitting={submitQcMutation.isPending}
+          maxQuantity={job.totalQuantity || job.students?.length || 100}
+          job={job}
+          students={job.students}
+          cardSpecs={job.cardSpecifications}
         />
       )}
     </div>

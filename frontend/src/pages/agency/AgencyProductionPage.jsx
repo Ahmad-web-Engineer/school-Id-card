@@ -43,7 +43,7 @@ export default function AgencyProductionPage() {
     queryFn: async () => {
       if (!currentJobId) return [];
       const res = await api.get(`/agency/jobs/${currentJobId}/batches`);
-      return res.data?.data?.data || [];
+      return extractArray(res);
     },
     enabled: !!currentJobId,
   });

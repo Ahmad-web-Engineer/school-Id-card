@@ -33,3 +33,4 @@ dist-ssr/
 uploads/
 backend/uploads/
 .pgdata/
+scratch/

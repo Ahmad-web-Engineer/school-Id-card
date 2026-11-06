@@ -11,6 +11,7 @@ import com.google.zxing.qrcode.QRCodeWriter;
 import com.platform.idcard.file.service.FileStorageService;
 import com.platform.idcard.organization.entity.School;
 import com.platform.idcard.student.entity.Student;
+import com.platform.idcard.template.dto.PrintSettingsDto;
 import com.platform.idcard.template.entity.CardTemplate;
 import com.platform.idcard.template.entity.TemplateVersion;
 import org.apache.pdfbox.Loader;
@@ -254,16 +255,21 @@ public class CardPdfRenderingService {
     }
 
     /**
-     * Renders an A4 Imposition Sheet PDF with multi-card grid and duplex mirroring.
-     * Generates alternating Front Side sheets and Back Side sheets for printing agencies.
-     * Back side sheet mirrors the column indices so front and back cards align when duplex printed.
+     * Renders a fully customizable prepress imposition PDF.
+     * Supports:
+     * - PLASTIC_CARD mode: 1-by-1 direct PVC card pages (CR80 size 54x85.6mm)
+     * - SHEET mode: Multi-card imposition grid on A4, A3, or Letter sheets
+     * - Configurable columns, rows, horizontal gap (mm), vertical gap (mm), margins, auto-centering
+     * - Side selection: DUPLEX (front + back mirrored), FRONT_ONLY, BACK_ONLY
+     * - Crop marks and cut guides toggle
      */
-    public byte[] renderA4SheetPdf(
+    public byte[] renderCustomImpositionPdf(
             CardTemplate template,
             TemplateVersion version,
             java.util.List<Student> students,
             School school,
-            String academicSession
+            String academicSession,
+            PrintSettingsDto settings
     ) {
         School effectiveSchool = getEffectiveSchool(school, template, null);
         String effectiveSession = academicSession != null ? academicSession : "2026-2027";
@@ -275,29 +281,90 @@ public class CardPdfRenderingService {
         float cardHeightMm = version != null && version.getCardHeightMm() != null ? version.getCardHeightMm().floatValue() : 85.60f;
         boolean isPortrait = cardHeightMm >= cardWidthMm;
 
-        int numCols = isPortrait ? 3 : 2;
-        int numRows = isPortrait ? 3 : 5;
+        PrintSettingsDto cfg = settings != null ? settings.sanitize(isPortrait) : PrintSettingsDto.defaultSettings(isPortrait);
 
         float cardWidthPt = cardWidthMm * POINTS_PER_MM;
         float cardHeightPt = cardHeightMm * POINTS_PER_MM;
+        String schoolName = effectiveSchool.getSchoolName() != null ? effectiveSchool.getSchoolName() : "School";
 
-        PDRectangle a4Size = PDRectangle.A4;
-        float a4WidthPt = a4Size.getWidth();
-        float a4HeightPt = a4Size.getHeight();
+        // MODE: PLASTIC_CARD (CR80 direct PVC card printer, 1 card per page)
+        if (PrintSettingsDto.MODE_PLASTIC.equalsIgnoreCase(cfg.printMode())
+                || PrintSettingsDto.PAPER_CR80.equalsIgnoreCase(cfg.paperSize())) {
+            PDRectangle cr80PageSize = new PDRectangle(cardWidthPt, cardHeightPt);
+            try (PDDocument document = new PDDocument()) {
+                for (Student student : effectiveStudents) {
+                    School studentSchool = student.getSchool() != null ? student.getSchool() : effectiveSchool;
 
-        if (!isPortrait && (numRows * cardHeightPt > a4HeightPt)) {
-            numRows = 4;
+                    if (!PrintSettingsDto.SIDES_BACK_ONLY.equalsIgnoreCase(cfg.sides())) {
+                        PDPage frontPage = new PDPage(cr80PageSize);
+                        document.addPage(frontPage);
+                        try (PDPageContentStream stream = new PDPageContentStream(document, frontPage)) {
+                            BufferedImage frontImg = renderCardToBufferedImage(template, version, student, studentSchool, effectiveSession, true);
+                            PDImageXObject pdFront = LosslessFactory.createFromImage(document, frontImg);
+                            stream.drawImage(pdFront, 0, 0, cardWidthPt, cardHeightPt);
+                            addInvisibleTextLayer(stream, version != null ? version.getFrontDesignJson() : null, true, student, studentSchool, effectiveSession, cardWidthPt, cardHeightPt);
+                        }
+                    }
+
+                    if (!PrintSettingsDto.SIDES_FRONT_ONLY.equalsIgnoreCase(cfg.sides())) {
+                        PDPage backPage = new PDPage(cr80PageSize);
+                        document.addPage(backPage);
+                        try (PDPageContentStream stream = new PDPageContentStream(document, backPage)) {
+                            BufferedImage backImg = renderCardToBufferedImage(template, version, student, studentSchool, effectiveSession, false);
+                            PDImageXObject pdBack = LosslessFactory.createFromImage(document, backImg);
+                            stream.drawImage(pdBack, 0, 0, cardWidthPt, cardHeightPt);
+                            addInvisibleTextLayer(stream, version != null ? version.getBackDesignJson() : null, false, student, studentSchool, effectiveSession, cardWidthPt, cardHeightPt);
+                        }
+                    }
+                }
+
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                document.save(out);
+                return out.toByteArray();
+            } catch (Exception e) {
+                log.error("Failed to render plastic card PDF: {}", e.getMessage(), e);
+                throw new RuntimeException("Plastic card PDF rendering failed: " + e.getMessage(), e);
+            }
+        }
+
+        // MODE: SHEET (Imposition grid on A4, A3, Letter)
+        PDRectangle sheetSize = PDRectangle.A4;
+        if (PrintSettingsDto.PAPER_A3.equalsIgnoreCase(cfg.paperSize())) {
+            sheetSize = PDRectangle.A3;
+        } else if (PrintSettingsDto.PAPER_LETTER.equalsIgnoreCase(cfg.paperSize())) {
+            sheetSize = PDRectangle.LETTER;
+        }
+
+        float sheetWidthPt = sheetSize.getWidth();
+        float sheetHeightPt = sheetSize.getHeight();
+
+        int numCols = cfg.columns() != null && cfg.columns() > 0 ? cfg.columns() : (isPortrait ? 3 : 2);
+        int numRows = cfg.rows() != null && cfg.rows() > 0 ? cfg.rows() : (isPortrait ? 3 : 4);
+
+        float hGapPt = (float) (cfg.horizontalSpacingMm() != null ? cfg.horizontalSpacingMm() * POINTS_PER_MM : 0f);
+        float vGapPt = (float) (cfg.verticalSpacingMm() != null ? cfg.verticalSpacingMm() * POINTS_PER_MM : 0f);
+
+        float gridWidthPt = (numCols * cardWidthPt) + (Math.max(0, numCols - 1) * hGapPt);
+        float gridHeightPt = (numRows * cardHeightPt) + (Math.max(0, numRows - 1) * vGapPt);
+
+        float marginXPt;
+        float marginYPt;
+        if (Boolean.TRUE.equals(cfg.autoCenter())) {
+            marginXPt = Math.max(8f, (sheetWidthPt - gridWidthPt) / 2f);
+            marginYPt = Math.max(8f, (sheetHeightPt - gridHeightPt) / 2f);
+        } else {
+            marginXPt = (float) (cfg.marginLeftMm() != null ? cfg.marginLeftMm() * POINTS_PER_MM : 10f * POINTS_PER_MM);
+            marginYPt = (float) (cfg.marginBottomMm() != null ? cfg.marginBottomMm() * POINTS_PER_MM : 10f * POINTS_PER_MM);
         }
 
         int cardsPerPage = numCols * numRows;
-        float marginXPt = (a4WidthPt - (numCols * cardWidthPt)) / 2f;
-        float marginYPt = (a4HeightPt - (numRows * cardHeightPt)) / 2f;
-
-        String schoolName = effectiveSchool.getSchoolName() != null ? effectiveSchool.getSchoolName() : "School";
-
         int totalStudents = effectiveStudents.size();
         int totalSheets = (int) Math.ceil((double) totalStudents / cardsPerPage);
         if (totalSheets == 0) totalSheets = 1;
+
+        boolean renderFront = !PrintSettingsDto.SIDES_BACK_ONLY.equalsIgnoreCase(cfg.sides());
+        boolean renderBack = !PrintSettingsDto.SIDES_FRONT_ONLY.equalsIgnoreCase(cfg.sides());
+        boolean isDuplex = PrintSettingsDto.SIDES_DUPLEX.equalsIgnoreCase(cfg.sides());
 
         try (PDDocument document = new PDDocument()) {
             for (int chunkIndex = 0; chunkIndex < totalSheets; chunkIndex++) {
@@ -305,66 +372,71 @@ public class CardPdfRenderingService {
                 int end = Math.min(start + cardsPerPage, totalStudents);
                 java.util.List<Student> chunkStudents = effectiveStudents.subList(start, end);
 
-                // --- Page 1: Front Side Sheet ---
-                PDPage frontPage = new PDPage(a4Size);
-                document.addPage(frontPage);
-                try (PDPageContentStream stream = new PDPageContentStream(document, frontPage)) {
-                    renderSheetMarginHeader(stream, schoolName, effectiveSession, chunkIndex + 1, totalSheets, "FRONT", marginXPt, a4HeightPt - (marginYPt * 0.45f));
+                // --- Front Side Sheet ---
+                if (renderFront) {
+                    PDPage frontPage = new PDPage(sheetSize);
+                    document.addPage(frontPage);
+                    try (PDPageContentStream stream = new PDPageContentStream(document, frontPage)) {
+                        renderSheetMarginHeader(stream, schoolName, effectiveSession, chunkIndex + 1, totalSheets, "FRONT", marginXPt, sheetHeightPt - (marginYPt * 0.45f));
 
-                    for (int i = 0; i < chunkStudents.size(); i++) {
-                        Student student = chunkStudents.get(i);
-                        School studentSchool = student.getSchool() != null ? student.getSchool() : effectiveSchool;
+                        for (int i = 0; i < chunkStudents.size(); i++) {
+                            Student student = chunkStudents.get(i);
+                            School studentSchool = student.getSchool() != null ? student.getSchool() : effectiveSchool;
 
-                        int col = i % numCols;
-                        int row = i / numCols;
-                        float slotX = marginXPt + (col * cardWidthPt);
-                        float slotY = a4HeightPt - marginYPt - ((row + 1) * cardHeightPt);
+                            int col = i % numCols;
+                            int row = i / numCols;
+                            float slotX = marginXPt + (col * (cardWidthPt + hGapPt));
+                            float slotY = sheetHeightPt - marginYPt - cardHeightPt - (row * (cardHeightPt + vGapPt));
 
-                        // Draw cutting guides / crop marks around each card boundary
-                        drawCropMarks(stream, slotX, slotY, cardWidthPt, cardHeightPt);
+                            if (Boolean.TRUE.equals(cfg.showCropMarks()) || Boolean.TRUE.equals(cfg.showCutGuides())) {
+                                drawCropMarks(stream, slotX, slotY, cardWidthPt, cardHeightPt);
+                            }
 
-                        // Place high-resolution 300 DPI card image directly into slot
-                        BufferedImage cardImg = renderCardToBufferedImage(template, version, student, studentSchool, effectiveSession, true);
-                        PDImageXObject pdCard = LosslessFactory.createFromImage(document, cardImg);
-                        stream.drawImage(pdCard, slotX, slotY, cardWidthPt, cardHeightPt);
+                            BufferedImage cardImg = renderCardToBufferedImage(template, version, student, studentSchool, effectiveSession, true);
+                            PDImageXObject pdCard = LosslessFactory.createFromImage(document, cardImg);
+                            stream.drawImage(pdCard, slotX, slotY, cardWidthPt, cardHeightPt);
 
-                        stream.saveGraphicsState();
-                        stream.transform(Matrix.getTranslateInstance(slotX, slotY));
-                        addInvisibleTextLayer(stream, version != null ? version.getFrontDesignJson() : null, true, student, studentSchool, effectiveSession, cardWidthPt, cardHeightPt);
-                        stream.restoreGraphicsState();
+                            stream.saveGraphicsState();
+                            stream.transform(Matrix.getTranslateInstance(slotX, slotY));
+                            addInvisibleTextLayer(stream, version != null ? version.getFrontDesignJson() : null, true, student, studentSchool, effectiveSession, cardWidthPt, cardHeightPt);
+                            stream.restoreGraphicsState();
+                        }
                     }
                 }
 
-                // --- Page 2: Back Side Sheet (Duplex Mirrored) ---
-                PDPage backPage = new PDPage(a4Size);
-                document.addPage(backPage);
-                try (PDPageContentStream stream = new PDPageContentStream(document, backPage)) {
-                    renderSheetMarginHeader(stream, schoolName, effectiveSession, chunkIndex + 1, totalSheets, "BACK (DUPLEX MIRRORED)", marginXPt, a4HeightPt - (marginYPt * 0.45f));
+                // --- Back Side Sheet ---
+                if (renderBack) {
+                    PDPage backPage = new PDPage(sheetSize);
+                    document.addPage(backPage);
+                    try (PDPageContentStream stream = new PDPageContentStream(document, backPage)) {
+                        String sideLabel = isDuplex ? "BACK (DUPLEX MIRRORED)" : "BACK";
+                        renderSheetMarginHeader(stream, schoolName, effectiveSession, chunkIndex + 1, totalSheets, sideLabel, marginXPt, sheetHeightPt - (marginYPt * 0.45f));
 
-                    for (int i = 0; i < chunkStudents.size(); i++) {
-                        Student student = chunkStudents.get(i);
-                        School studentSchool = student.getSchool() != null ? student.getSchool() : effectiveSchool;
+                        for (int i = 0; i < chunkStudents.size(); i++) {
+                            Student student = chunkStudents.get(i);
+                            School studentSchool = student.getSchool() != null ? student.getSchool() : effectiveSchool;
 
-                        int col = i % numCols;
-                        int row = i / numCols;
-                        int backCol = (numCols - 1) - col; // Mirror column for duplex alignment
-                        int backRow = row;
+                            int col = i % numCols;
+                            int row = i / numCols;
+                            int backCol = isDuplex ? ((numCols - 1) - col) : col;
+                            int backRow = row;
 
-                        float slotX = marginXPt + (backCol * cardWidthPt);
-                        float slotY = a4HeightPt - marginYPt - ((backRow + 1) * cardHeightPt);
+                            float slotX = marginXPt + (backCol * (cardWidthPt + hGapPt));
+                            float slotY = sheetHeightPt - marginYPt - cardHeightPt - (backRow * (cardHeightPt + vGapPt));
 
-                        // Draw cutting guides / crop marks around each card boundary
-                        drawCropMarks(stream, slotX, slotY, cardWidthPt, cardHeightPt);
+                            if (Boolean.TRUE.equals(cfg.showCropMarks()) || Boolean.TRUE.equals(cfg.showCutGuides())) {
+                                drawCropMarks(stream, slotX, slotY, cardWidthPt, cardHeightPt);
+                            }
 
-                        // Place high-resolution 300 DPI back card image into slot
-                        BufferedImage backCardImg = renderCardToBufferedImage(template, version, student, studentSchool, effectiveSession, false);
-                        PDImageXObject pdBackCard = LosslessFactory.createFromImage(document, backCardImg);
-                        stream.drawImage(pdBackCard, slotX, slotY, cardWidthPt, cardHeightPt);
+                            BufferedImage backCardImg = renderCardToBufferedImage(template, version, student, studentSchool, effectiveSession, false);
+                            PDImageXObject pdBackCard = LosslessFactory.createFromImage(document, backCardImg);
+                            stream.drawImage(pdBackCard, slotX, slotY, cardWidthPt, cardHeightPt);
 
-                        stream.saveGraphicsState();
-                        stream.transform(Matrix.getTranslateInstance(slotX, slotY));
-                        addInvisibleTextLayer(stream, version != null ? version.getBackDesignJson() : null, false, student, studentSchool, effectiveSession, cardWidthPt, cardHeightPt);
-                        stream.restoreGraphicsState();
+                            stream.saveGraphicsState();
+                            stream.transform(Matrix.getTranslateInstance(slotX, slotY));
+                            addInvisibleTextLayer(stream, version != null ? version.getBackDesignJson() : null, false, student, studentSchool, effectiveSession, cardWidthPt, cardHeightPt);
+                            stream.restoreGraphicsState();
+                        }
                     }
                 }
             }
@@ -373,22 +445,60 @@ public class CardPdfRenderingService {
             document.save(out);
             return out.toByteArray();
         } catch (Exception e) {
-            log.error("Failed to render A4 imposition sheet PDF: {}", e.getMessage(), e);
-            throw new RuntimeException("A4 imposition sheet PDF rendering failed: " + e.getMessage(), e);
+            log.error("Failed to render custom imposition sheet PDF: {}", e.getMessage(), e);
+            throw new RuntimeException("Imposition sheet PDF rendering failed: " + e.getMessage(), e);
         }
     }
 
     /**
-     * Renders an A4 Imposition Sheet as a high-resolution 300 DPI JPEG image.
-     * Arranges cards at exact physical dimensions (e.g. 54x85.6mm) with crop marks and duplex mirroring.
+     * Legacy/Default A4 Imposition Sheet PDF generator delegating to renderCustomImpositionPdf.
      */
-    public byte[] renderA4SheetImage(
+    public byte[] renderA4SheetPdf(
+            CardTemplate template,
+            TemplateVersion version,
+            java.util.List<Student> students,
+            School school,
+            String academicSession
+    ) {
+        float cardWidthMm = version != null && version.getCardWidthMm() != null ? version.getCardWidthMm().floatValue() : 54.00f;
+        float cardHeightMm = version != null && version.getCardHeightMm() != null ? version.getCardHeightMm().floatValue() : 85.60f;
+        boolean isPortrait = cardHeightMm >= cardWidthMm;
+        int numCols = isPortrait ? 3 : 2;
+        int numRows = isPortrait ? 3 : 5;
+        if (!isPortrait && (numRows * cardHeightMm * POINTS_PER_MM > PDRectangle.A4.getHeight())) {
+            numRows = 4;
+        }
+        PrintSettingsDto settings = new PrintSettingsDto(
+                PrintSettingsDto.MODE_SHEET,
+                PrintSettingsDto.PAPER_A4,
+                PrintSettingsDto.SIDES_DUPLEX,
+                numCols,
+                numRows,
+                0.0,
+                0.0,
+                10.0,
+                10.0,
+                10.0,
+                10.0,
+                true,
+                true,
+                true,
+                false
+        );
+        return renderCustomImpositionPdf(template, version, students, school, academicSession, settings);
+    }
+
+    /**
+     * Renders a customizable prepress imposition sheet as a 300 DPI high-resolution JPEG.
+     */
+    public byte[] renderCustomImpositionImage(
             CardTemplate template,
             TemplateVersion version,
             java.util.List<Student> students,
             School school,
             String academicSession,
-            String side
+            String side,
+            PrintSettingsDto settings
     ) {
         boolean isFront = !"back".equalsIgnoreCase(side);
         School effectiveSchool = getEffectiveSchool(school, template, null);
@@ -401,41 +511,76 @@ public class CardPdfRenderingService {
         float cardHeightMm = version != null && version.getCardHeightMm() != null ? version.getCardHeightMm().floatValue() : 85.60f;
         boolean isPortrait = cardHeightMm >= cardWidthMm;
 
-        int numCols = isPortrait ? 3 : 2;
-        int numRows = isPortrait ? 3 : 5;
+        PrintSettingsDto cfg = settings != null ? settings.sanitize(isPortrait) : PrintSettingsDto.defaultSettings(isPortrait);
 
-        // A4 at 300 DPI: 210 x 297 mm
         float scale = 300.0f / 25.4f;
-        int a4WidthPx = Math.round(210.0f * scale);   // ~2480 px
-        int a4HeightPx = Math.round(297.0f * scale);  // ~3508 px
+
+        // MODE: PLASTIC_CARD (Single card 300 DPI image)
+        if (PrintSettingsDto.MODE_PLASTIC.equalsIgnoreCase(cfg.printMode())
+                || PrintSettingsDto.PAPER_CR80.equalsIgnoreCase(cfg.paperSize())) {
+            Student firstStudent = effectiveStudents.get(0);
+            BufferedImage cardImg = renderCardToBufferedImage(template, version, firstStudent, effectiveSchool, effectiveSession, isFront);
+            try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                ImageIO.write(cardImg, "jpg", out);
+                return out.toByteArray();
+            } catch (Exception e) {
+                throw new RuntimeException("Plastic card JPEG export failed: " + e.getMessage(), e);
+            }
+        }
+
+        // MODE: SHEET (A4, A3, Letter)
+        int sheetWidthMm = 210;
+        int sheetHeightMm = 297;
+        if (PrintSettingsDto.PAPER_A3.equalsIgnoreCase(cfg.paperSize())) {
+            sheetWidthMm = 297;
+            sheetHeightMm = 420;
+        } else if (PrintSettingsDto.PAPER_LETTER.equalsIgnoreCase(cfg.paperSize())) {
+            sheetWidthMm = 216;
+            sheetHeightMm = 279;
+        }
+
+        int sheetWidthPx = Math.round(sheetWidthMm * scale);
+        int sheetHeightPx = Math.round(sheetHeightMm * scale);
 
         int cardWidthPx = Math.round(cardWidthMm * scale);
         int cardHeightPx = Math.round(cardHeightMm * scale);
 
-        if (!isPortrait && (numRows * cardHeightPx > a4HeightPx)) {
-            numRows = 4;
+        int numCols = cfg.columns() != null && cfg.columns() > 0 ? cfg.columns() : (isPortrait ? 3 : 2);
+        int numRows = cfg.rows() != null && cfg.rows() > 0 ? cfg.rows() : (isPortrait ? 3 : 4);
+
+        int hGapPx = Math.round((float) (cfg.horizontalSpacingMm() != null ? cfg.horizontalSpacingMm() * scale : 0f));
+        int vGapPx = Math.round((float) (cfg.verticalSpacingMm() != null ? cfg.verticalSpacingMm() * scale : 0f));
+
+        int gridWidthPx = (numCols * cardWidthPx) + (Math.max(0, numCols - 1) * hGapPx);
+        int gridHeightPx = (numRows * cardHeightPx) + (Math.max(0, numRows - 1) * vGapPx);
+
+        int marginXPx;
+        int marginYPx;
+        if (Boolean.TRUE.equals(cfg.autoCenter())) {
+            marginXPx = Math.max(0, (sheetWidthPx - gridWidthPx) / 2);
+            marginYPx = Math.max(0, (sheetHeightPx - gridHeightPx) / 2);
+        } else {
+            marginXPx = Math.round((float) (cfg.marginLeftMm() != null ? cfg.marginLeftMm() * scale : 10f * scale));
+            marginYPx = Math.round((float) (cfg.marginTopMm() != null ? cfg.marginTopMm() * scale : 10f * scale));
         }
 
-        int marginXPx = (a4WidthPx - (numCols * cardWidthPx)) / 2;
-        int marginYPx = (a4HeightPx - (numRows * cardHeightPx)) / 2;
-
-        BufferedImage a4Img = new BufferedImage(a4WidthPx, a4HeightPx, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g2 = a4Img.createGraphics();
+        BufferedImage sheetImg = new BufferedImage(sheetWidthPx, sheetHeightPx, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = sheetImg.createGraphics();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
         g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
 
-        // Fill clean white sheet background
         g2.setColor(Color.WHITE);
-        g2.fillRect(0, 0, a4WidthPx, a4HeightPx);
+        g2.fillRect(0, 0, sheetWidthPx, sheetHeightPx);
 
-        // Header margin annotation
         String schoolName = effectiveSchool.getSchoolName() != null ? effectiveSchool.getSchoolName() : "School";
-        String headerText = schoolName + "  |  Session: " + effectiveSession + "  |  [A4 IMPOSITION SHEET - " + (isFront ? "FRONT" : "BACK (DUPLEX MIRRORED)") + "]";
+        boolean isDuplex = PrintSettingsDto.SIDES_DUPLEX.equalsIgnoreCase(cfg.sides());
+        String sideTitle = isFront ? "FRONT" : (isDuplex ? "BACK (DUPLEX MIRRORED)" : "BACK");
+        String headerText = schoolName + "  |  Session: " + effectiveSession + "  |  [" + cfg.paperSize() + " IMPOSITION SHEET - " + sideTitle + "]";
         g2.setColor(new Color(100, 116, 139));
         g2.setFont(new Font("SansSerif", Font.BOLD, 26));
-        g2.drawString(headerText, marginXPx, marginYPx / 2 + 10);
+        g2.drawString(headerText, Math.max(40, marginXPx), Math.max(40, marginYPx / 2 + 10));
 
         int cardsPerPage = numCols * numRows;
         int studentsToDraw = Math.min(effectiveStudents.size(), cardsPerPage);
@@ -446,17 +591,17 @@ public class CardPdfRenderingService {
 
             int col = i % numCols;
             int row = i / numCols;
-            if (!isFront) {
+            if (!isFront && isDuplex) {
                 col = (numCols - 1) - col; // Mirror column for duplex alignment
             }
 
-            int slotX = marginXPx + (col * cardWidthPx);
-            int slotY = marginYPx + (row * cardHeightPx);
+            int slotX = marginXPx + (col * (cardWidthPx + hGapPx));
+            int slotY = marginYPx + (row * (cardHeightPx + vGapPx));
 
-            // Draw crop marks / cutting tick marks around slot
-            drawCropMarksJava2D(g2, slotX, slotY, cardWidthPx, cardHeightPx);
+            if (Boolean.TRUE.equals(cfg.showCropMarks()) || Boolean.TRUE.equals(cfg.showCutGuides())) {
+                drawCropMarksJava2D(g2, slotX, slotY, cardWidthPx, cardHeightPx);
+            }
 
-            // Render card at 300 DPI and draw into slot
             BufferedImage cardImg = renderCardToBufferedImage(template, version, student, studentSchool, effectiveSession, isFront);
             g2.drawImage(cardImg, slotX, slotY, cardWidthPx, cardHeightPx, null);
         }
@@ -464,12 +609,51 @@ public class CardPdfRenderingService {
         g2.dispose();
 
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            ImageIO.write(a4Img, "jpg", out);
+            ImageIO.write(sheetImg, "jpg", out);
             return out.toByteArray();
         } catch (Exception e) {
-            log.error("Failed to render A4 sheet JPEG: {}", e.getMessage(), e);
-            throw new RuntimeException("A4 sheet JPEG export failed: " + e.getMessage(), e);
+            log.error("Failed to render imposition sheet JPEG: {}", e.getMessage(), e);
+            throw new RuntimeException("Imposition sheet JPEG export failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Legacy/Default A4 Imposition Sheet JPEG generator delegating to renderCustomImpositionImage.
+     */
+    public byte[] renderA4SheetImage(
+            CardTemplate template,
+            TemplateVersion version,
+            java.util.List<Student> students,
+            School school,
+            String academicSession,
+            String side
+    ) {
+        float cardWidthMm = version != null && version.getCardWidthMm() != null ? version.getCardWidthMm().floatValue() : 54.00f;
+        float cardHeightMm = version != null && version.getCardHeightMm() != null ? version.getCardHeightMm().floatValue() : 85.60f;
+        boolean isPortrait = cardHeightMm >= cardWidthMm;
+        int numCols = isPortrait ? 3 : 2;
+        int numRows = isPortrait ? 3 : 5;
+        if (!isPortrait && (numRows * cardHeightMm * POINTS_PER_MM > PDRectangle.A4.getHeight())) {
+            numRows = 4;
+        }
+        PrintSettingsDto settings = new PrintSettingsDto(
+                PrintSettingsDto.MODE_SHEET,
+                PrintSettingsDto.PAPER_A4,
+                PrintSettingsDto.SIDES_DUPLEX,
+                numCols,
+                numRows,
+                0.0,
+                0.0,
+                10.0,
+                10.0,
+                10.0,
+                10.0,
+                true,
+                true,
+                true,
+                false
+        );
+        return renderCustomImpositionImage(template, version, students, school, academicSession, side, settings);
     }
 
     /**
@@ -701,6 +885,22 @@ public class CardPdfRenderingService {
         float widthMm = element.hasNonNull("width") ? (float) element.get("width").asDouble() : 20f;
         float heightMm = element.hasNonNull("height") ? (float) element.get("height").asDouble() : 20f;
 
+        // ADAPTIVE AUTO-FIT: Clamp element width and position if it overflows the card canvas boundary
+        if (cardWidthMm < cardHeightMm) { // Portrait card mode (e.g. 54 x 85.6 mm)
+            if (!"rect".equalsIgnoreCase(type) && !"shape".equalsIgnoreCase(type) && !"banner".equalsIgnoreCase(type)) {
+                if (xMm + widthMm > cardWidthMm - 1f) {
+                    widthMm = Math.max(10f, cardWidthMm - xMm - 2f);
+                }
+                if (xMm >= cardWidthMm - 8f) {
+                    xMm = Math.max(2f, cardWidthMm - widthMm - 4f);
+                }
+            } else {
+                if (widthMm > cardWidthMm) {
+                    widthMm = cardWidthMm;
+                }
+            }
+        }
+
         // GHOST ELEMENT FILTER: Filter out elements outside card boundaries or invalid sizes
         if (xMm >= cardWidthMm || yMm >= cardHeightMm || widthMm <= 0 || heightMm <= 0) {
             return;
@@ -712,7 +912,11 @@ public class CardPdfRenderingService {
         int elH = Math.round(heightMm * scale);
 
         Shape oldClip = g2.getClip();
-        g2.clipRect(elX, elY, elW, elH);
+        if ("text".equalsIgnoreCase(type) || "barcode".equalsIgnoreCase(type)) {
+            g2.clipRect(elX, Math.max(0, elY - 2), elW + 4, elH + 4);
+        } else {
+            g2.clipRect(elX, elY, elW, elH);
+        }
 
         try {
             switch (type) {

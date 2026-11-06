@@ -36,6 +36,7 @@ export default function AssignAgencyModal({ isOpen, onClose, order, onSuccess })
           expectedDeliveryDate: deliveryStr,
           agreedRate: '25.00',
           notes: '',
+          allowAgencyOverride: false,
           jobItems: order.items.map((item) => ({
             orderItemId: item.id,
             productType: item.productType,
@@ -60,6 +61,7 @@ export default function AssignAgencyModal({ isOpen, onClose, order, onSuccess })
         expectedDeliveryDate: defaultDelivery.toISOString().split('T')[0],
         agreedRate: '25.00',
         notes: '',
+        allowAgencyOverride: false,
         jobItems: order.items.map((item) => ({
           orderItemId: item.id,
           productType: item.productType,
@@ -156,6 +158,7 @@ export default function AssignAgencyModal({ isOpen, onClose, order, onSuccess })
         expectedDeliveryDate: a.expectedDeliveryDate || undefined,
         agreedRate: parseFloat(a.agreedRate),
         notes: a.notes.trim() || undefined,
+        allowAgencyOverride: !!a.allowAgencyOverride,
         jobItems: a.jobItems
           .filter((ji) => ji.assignedQuantity > 0)
           .map((ji) => ({
@@ -322,6 +325,26 @@ export default function AssignAgencyModal({ isOpen, onClose, order, onSuccess })
                   onChange={(e) => handleUpdateAssignment(aIdx, 'notes', e.target.value)}
                   className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
+              </div>
+
+              {/* Prepress Permissions */}
+              <div className="mt-3 p-2.5 bg-indigo-50/50 rounded-lg border border-indigo-100 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-slate-800 block">
+                    Allow Agency to Customize Print Layout
+                  </span>
+                  <span className="text-[11px] text-slate-500 block">
+                    If unchecked, agency is strictly locked to Admin's imposition layout specifications.
+                  </span>
+                </div>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={assignment.allowAgencyOverride || false}
+                    onChange={(e) => handleUpdateAssignment(aIdx, 'allowAgencyOverride', e.target.checked)}
+                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                  />
+                </label>
               </div>
             </Card>
           ))}

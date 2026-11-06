@@ -59,6 +59,9 @@ public class PrintingOrder {
     @Column(name = "remarks", columnDefinition = "TEXT")
     private String remarks;
 
+    @Column(name = "print_settings_json", columnDefinition = "TEXT")
+    private String printSettingsJson;
+
     @Column(name = "rejection_remarks", columnDefinition = "TEXT")
     private String rejectionRemarks;
 
@@ -295,5 +298,13 @@ public class PrintingOrder {
 
     public void setQuotation(Quotation quotation) {
         this.quotation = quotation;
+    }
+
+    public String getPrintSettingsJson() {
+        return printSettingsJson;
+    }
+
+    public void setPrintSettingsJson(String printSettingsJson) {
+        this.printSettingsJson = printSettingsJson;
     }
 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.platform.idcard.file.service.FileStorageService;
 import com.platform.idcard.organization.entity.School;
 import com.platform.idcard.student.entity.Student;
+import com.platform.idcard.template.dto.PrintSettingsDto;
 import com.platform.idcard.template.entity.CardTemplate;
 import com.platform.idcard.template.entity.TemplateVersion;
 import com.platform.idcard.template.service.CardPdfRenderingService;
@@ -599,5 +600,94 @@ class CardPdfRenderingServiceTest {
         assertThat(backImg).isNotNull();
         assertThat(backImg.getWidth()).isGreaterThan(500);
         assertThat(backImg.getHeight()).isGreaterThan(300);
+    }
+
+    @Test
+    @DisplayName("13. renderCustomImpositionPdf supports custom grid (2x2), spacing (5mm), and FRONT_ONLY")
+    void testRenderCustomImpositionPdfCustomGridAndSpacing() throws Exception {
+        PrintSettingsDto settings = new PrintSettingsDto(
+                PrintSettingsDto.MODE_SHEET,
+                PrintSettingsDto.PAPER_A4,
+                PrintSettingsDto.SIDES_FRONT_ONLY,
+                2, // 2 columns
+                2, // 2 rows -> 4 cards per page
+                5.0, // 5mm hGap
+                5.0, // 5mm vGap
+                15.0,
+                15.0,
+                15.0,
+                15.0,
+                true,
+                true,
+                true,
+                false
+        );
+
+        byte[] pdfBytes = renderingService.renderCustomImpositionPdf(
+                sampleTemplate,
+                sampleVersion,
+                List.of(sampleStudent),
+                sampleSchool,
+                "2026-2027",
+                settings
+        );
+
+        assertThat(pdfBytes).isNotNull().isNotEmpty();
+        try (PDDocument doc = Loader.loadPDF(pdfBytes)) {
+            // FRONT_ONLY means only 1 page is generated
+            assertThat(doc.getNumberOfPages()).isEqualTo(1);
+            float width = doc.getPage(0).getMediaBox().getWidth();
+            float height = doc.getPage(0).getMediaBox().getHeight();
+            assertThat(width).isCloseTo(595.28f, org.assertj.core.data.Offset.offset(0.5f));
+            assertThat(height).isCloseTo(841.89f, org.assertj.core.data.Offset.offset(0.5f));
+        }
+    }
+
+    @Test
+    @DisplayName("14. renderCustomImpositionPdf supports PLASTIC_CARD mode (CR80 PVC direct 1 card per page)")
+    void testRenderCustomImpositionPdfPlasticCardMode() throws Exception {
+        PrintSettingsDto settings = new PrintSettingsDto(
+                PrintSettingsDto.MODE_PLASTIC,
+                PrintSettingsDto.PAPER_CR80,
+                PrintSettingsDto.SIDES_DUPLEX,
+                1,
+                1,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                true,
+                false,
+                false,
+                false
+        );
+
+        byte[] pdfBytes = renderingService.renderCustomImpositionPdf(
+                sampleTemplate,
+                sampleVersion,
+                List.of(sampleStudent),
+                sampleSchool,
+                "2026-2027",
+                settings
+        );
+
+        assertThat(pdfBytes).isNotNull().isNotEmpty();
+        try (PDDocument doc = Loader.loadPDF(pdfBytes)) {
+            // 1 student * DUPLEX = 2 pages (Front then Back)
+            assertThat(doc.getNumberOfPages()).isEqualTo(2);
+
+            // Page dimensions should match exact card size: 85.6mm x 54mm = 242.64 x 153.07 pt
+            float expectedW = 85.60f * (72.0f / 25.4f);
+            float expectedH = 54.00f * (72.0f / 25.4f);
+
+            for (int p = 0; p < doc.getNumberOfPages(); p++) {
+                float w = doc.getPage(p).getMediaBox().getWidth();
+                float h = doc.getPage(p).getMediaBox().getHeight();
+                assertThat(w).isCloseTo(expectedW, org.assertj.core.data.Offset.offset(1.0f));
+                assertThat(h).isCloseTo(expectedH, org.assertj.core.data.Offset.offset(1.0f));
+            }
+        }
     }
 }

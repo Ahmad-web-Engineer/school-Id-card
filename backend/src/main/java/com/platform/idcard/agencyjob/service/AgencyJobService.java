@@ -1,6 +1,8 @@
 package com.platform.idcard.agencyjob.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.platform.idcard.agencyjob.dto.*;
+import com.platform.idcard.template.dto.PrintSettingsDto;
 import com.platform.idcard.agencyjob.entity.AgencyAssignment;
 import com.platform.idcard.agencyjob.entity.AgencyJobItem;
 import com.platform.idcard.agencyjob.entity.AssignmentStatus;
@@ -54,6 +56,7 @@ public class AgencyJobService {
     private final UserRepository userRepository;
     private final OrderStudentItemRepository orderStudentItemRepository;
     private final CardPdfRenderingService cardPdfRenderingService;
+    private final ObjectMapper objectMapper;
 
     public AgencyJobService(
             AgencyAssignmentRepository agencyAssignmentRepository,
@@ -62,7 +65,8 @@ public class AgencyJobService {
             AgencyRepository agencyRepository,
             UserRepository userRepository,
             OrderStudentItemRepository orderStudentItemRepository,
-            CardPdfRenderingService cardPdfRenderingService
+            CardPdfRenderingService cardPdfRenderingService,
+            ObjectMapper objectMapper
     ) {
         this.agencyAssignmentRepository = agencyAssignmentRepository;
         this.agencyJobItemRepository = agencyJobItemRepository;
@@ -71,6 +75,7 @@ public class AgencyJobService {
         this.userRepository = userRepository;
         this.orderStudentItemRepository = orderStudentItemRepository;
         this.cardPdfRenderingService = cardPdfRenderingService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -154,6 +159,16 @@ public class AgencyJobService {
             assignment.setAgreedRate(aReq.agreedRate());
             assignment.setAssignmentStatus(AssignmentStatus.ASSIGNED);
             assignment.setNotes(aReq.notes());
+            if (aReq.printSettings() != null) {
+                try {
+                    assignment.setPrintSettingsJson(objectMapper.writeValueAsString(aReq.printSettings()));
+                } catch (Exception e) {
+                    log.warn("Failed to serialize assignment print settings: {}", e.getMessage());
+                }
+            } else if (order.getPrintSettingsJson() != null) {
+                assignment.setPrintSettingsJson(order.getPrintSettingsJson());
+            }
+            assignment.setAllowAgencyOverride(Boolean.TRUE.equals(aReq.allowAgencyOverride()));
 
             int totalAssignedQty = 0;
             for (JobItemAllocationRequest jReq : aReq.jobItems()) {
@@ -547,6 +562,10 @@ public class AgencyJobService {
                 ))
                 .toList();
 
+        boolean isPortrait = tv == null || tv.getCardHeightMm() == null || tv.getCardWidthMm() == null ||
+                tv.getCardHeightMm().compareTo(tv.getCardWidthMm()) >= 0;
+        PrintSettingsDto printSettings = parsePrintSettings(a.getPrintSettingsJson(), isPortrait);
+
         return new AdminAgencyAssignmentDetailResponse(
                 a.getId(),
                 a.getAssignmentNumber(),
@@ -571,7 +590,9 @@ public class AgencyJobService {
                 totalQty,
                 jobItems,
                 specs,
-                students
+                students,
+                printSettings,
+                a.isAllowAgencyOverride()
         );
     }
 
@@ -645,6 +666,10 @@ public class AgencyJobService {
                 ))
                 .toList();
 
+        boolean isPortrait = tv == null || tv.getCardHeightMm() == null || tv.getCardWidthMm() == null ||
+                tv.getCardHeightMm().compareTo(tv.getCardWidthMm()) >= 0;
+        PrintSettingsDto printSettings = parsePrintSettings(a.getPrintSettingsJson(), isPortrait);
+
         return new AgencyJobDetailResponse(
                 a.getId(),
                 a.getAssignmentNumber(),
@@ -657,7 +682,9 @@ public class AgencyJobService {
                 a.getRejectionReason(),
                 specs,
                 items,
-                students
+                students,
+                printSettings,
+                a.isAllowAgencyOverride()
         );
     }
 
@@ -727,6 +754,97 @@ public class AgencyJobService {
             student.setSchool(school);
         }
         return student;
+    }
+
+    private PrintSettingsDto parsePrintSettings(String json, boolean isPortrait) {
+        if (json != null && !json.isBlank()) {
+            try {
+                PrintSettingsDto dto = objectMapper.readValue(json, PrintSettingsDto.class);
+                return dto.sanitize(isPortrait);
+            } catch (Exception e) {
+                // fall through to default
+            }
+        }
+        return PrintSettingsDto.defaultSettings(isPortrait);
+    }
+
+    @Transactional(readOnly = true)
+    public PrintSettingsDto getAgencyPrintSettings(UUID jobId, UUID agencyId) {
+        AgencyAssignment assignment = agencyAssignmentRepository.findByIdAndAgencyId(jobId, agencyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Job assignment not found with ID: " + jobId));
+        TemplateVersion tv = assignment.getOrder().getTemplateVersion();
+        boolean isPortrait = tv == null || tv.getCardHeightMm() == null || tv.getCardWidthMm() == null ||
+                tv.getCardHeightMm().compareTo(tv.getCardWidthMm()) >= 0;
+        return parsePrintSettings(assignment.getPrintSettingsJson(), isPortrait);
+    }
+
+    @Transactional
+    public PrintSettingsDto updateAgencyPrintSettings(UUID jobId, UUID agencyId, PrintSettingsDto request) {
+        AgencyAssignment assignment = agencyAssignmentRepository.findByIdAndAgencyId(jobId, agencyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Job assignment not found with ID: " + jobId));
+
+        if (!assignment.isAllowAgencyOverride()) {
+            throw new ApiException(ErrorCode.ACCESS_DENIED, "Print layout specifications are locked by Super Admin for this job.");
+        }
+
+        TemplateVersion tv = assignment.getOrder().getTemplateVersion();
+        boolean isPortrait = tv == null || tv.getCardHeightMm() == null || tv.getCardWidthMm() == null ||
+                tv.getCardHeightMm().compareTo(tv.getCardWidthMm()) >= 0;
+        PrintSettingsDto sanitized = (request != null ? request : PrintSettingsDto.defaultSettings(isPortrait)).sanitize(isPortrait);
+
+        try {
+            assignment.setPrintSettingsJson(objectMapper.writeValueAsString(sanitized));
+            agencyAssignmentRepository.save(assignment);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to persist print settings: " + e.getMessage(), e);
+        }
+        return sanitized;
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobCustomImpositionPdf(UUID jobId, UUID agencyId, PrintSettingsDto overrideSettings) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        AgencyAssignment assignment = agencyAssignmentRepository.findByIdAndAgencyId(jobId, agencyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Job assignment not found with ID: " + jobId));
+        boolean isPortrait = ctx.version() == null || ctx.version().getCardHeightMm() == null || ctx.version().getCardWidthMm() == null ||
+                ctx.version().getCardHeightMm().compareTo(ctx.version().getCardWidthMm()) >= 0;
+
+        PrintSettingsDto effectiveSettings;
+        if (overrideSettings != null) {
+            effectiveSettings = overrideSettings.sanitize(isPortrait);
+        } else {
+            effectiveSettings = parsePrintSettings(assignment.getPrintSettingsJson(), isPortrait);
+        }
+        return cardPdfRenderingService.renderCustomImpositionPdf(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session(), effectiveSettings);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobCustomImpositionImage(UUID jobId, UUID agencyId, String side, PrintSettingsDto overrideSettings) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        AgencyAssignment assignment = agencyAssignmentRepository.findByIdAndAgencyId(jobId, agencyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Job assignment not found with ID: " + jobId));
+        boolean isPortrait = ctx.version() == null || ctx.version().getCardHeightMm() == null || ctx.version().getCardWidthMm() == null ||
+                ctx.version().getCardHeightMm().compareTo(ctx.version().getCardWidthMm()) >= 0;
+
+        PrintSettingsDto effectiveSettings;
+        if (overrideSettings != null) {
+            effectiveSettings = overrideSettings.sanitize(isPortrait);
+        } else {
+            effectiveSettings = parsePrintSettings(assignment.getPrintSettingsJson(), isPortrait);
+        }
+        return cardPdfRenderingService.renderCustomImpositionImage(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session(), side, effectiveSettings);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobPlasticCardsPdf(UUID jobId, UUID agencyId, String sides) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        PrintSettingsDto plasticSettings = new PrintSettingsDto(
+                PrintSettingsDto.MODE_PLASTIC,
+                PrintSettingsDto.PAPER_CR80,
+                sides != null ? sides : PrintSettingsDto.SIDES_DUPLEX,
+                1, 1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, true, false, false, false
+        );
+        return cardPdfRenderingService.renderCustomImpositionPdf(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session(), plasticSettings);
     }
 
     @Transactional(readOnly = true)

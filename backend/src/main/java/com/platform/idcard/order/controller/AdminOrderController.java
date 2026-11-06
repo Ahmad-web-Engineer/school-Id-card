@@ -5,6 +5,7 @@ import com.platform.idcard.common.response.ApiResponse;
 import com.platform.idcard.common.response.PagedResponse;
 import com.platform.idcard.order.dto.*;
 import com.platform.idcard.order.service.OrderService;
+import com.platform.idcard.template.dto.PrintSettingsDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -99,6 +100,118 @@ public class AdminOrderController {
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"card_" + studentId + ".pdf\"")
+                .body(pdfBytes);
+    }
+
+    @GetMapping("/{id}/print-settings")
+    @Operation(summary = "Get order print and prepress layout settings", description = "Retrieves current imposition and prepress print settings for the order")
+    public ResponseEntity<ApiResponse<PrintSettingsDto>> getOrderPrintSettings(@PathVariable UUID id) {
+        PrintSettingsDto settings = orderService.getOrderPrintSettings(id);
+        return ResponseEntity.ok(ApiResponse.ok(settings));
+    }
+
+    @PutMapping("/{id}/print-settings")
+    @Operation(summary = "Update order print and prepress layout settings", description = "Saves custom imposition and prepress print settings for the order")
+    public ResponseEntity<ApiResponse<PrintSettingsDto>> updateOrderPrintSettings(
+            @PathVariable UUID id,
+            @RequestBody PrintSettingsDto settings
+    ) {
+        PrintSettingsDto saved = orderService.updateOrderPrintSettings(id, settings);
+        return ResponseEntity.ok(ApiResponse.ok(saved));
+    }
+
+    @GetMapping("/{id}/print-sheet-pdf")
+    @Operation(summary = "Download custom imposition sheet PDF", description = "Generates multi-page imposition sheet PDF (A4, A3, Letter) with configurable grid, spacing, and duplex column mirroring")
+    public ResponseEntity<byte[]> downloadOrderCustomSheetPdf(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String paperSize,
+            @RequestParam(required = false) Integer columns,
+            @RequestParam(required = false) Integer rows,
+            @RequestParam(required = false) Double horizontalSpacingMm,
+            @RequestParam(required = false) Double verticalSpacingMm,
+            @RequestParam(required = false) String sides,
+            @RequestParam(required = false) String printMode,
+            @RequestParam(required = false) Boolean showCropMarks,
+            @RequestParam(required = false) Boolean showCutGuides,
+            @RequestParam(required = false) Boolean autoCenter
+    ) {
+        PrintSettingsDto override = null;
+        if (paperSize != null || columns != null || rows != null || horizontalSpacingMm != null || sides != null || printMode != null) {
+            override = new PrintSettingsDto(
+                    printMode != null ? printMode : PrintSettingsDto.MODE_SHEET,
+                    paperSize != null ? paperSize : PrintSettingsDto.PAPER_A4,
+                    sides != null ? sides : PrintSettingsDto.SIDES_DUPLEX,
+                    columns,
+                    rows,
+                    horizontalSpacingMm != null ? horizontalSpacingMm : 2.0,
+                    verticalSpacingMm != null ? verticalSpacingMm : 2.0,
+                    10.0, 10.0, 10.0, 10.0,
+                    autoCenter != null ? autoCenter : true,
+                    showCropMarks != null ? showCropMarks : true,
+                    showCutGuides != null ? showCutGuides : true,
+                    false
+            );
+        }
+        byte[] pdfBytes = orderService.renderOrderCustomImpositionPdf(id, override);
+        String filename = "order_" + id + "_sheet.pdf";
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(pdfBytes);
+    }
+
+    @GetMapping("/{id}/print-sheet-image")
+    @Operation(summary = "Download custom imposition sheet JPEG", description = "Generates high-resolution 300 DPI imposition sheet JPEG image with custom grid, spacing, and crop marks")
+    public ResponseEntity<byte[]> downloadOrderCustomSheetImage(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "front") String side,
+            @RequestParam(required = false) String paperSize,
+            @RequestParam(required = false) Integer columns,
+            @RequestParam(required = false) Integer rows,
+            @RequestParam(required = false) Double horizontalSpacingMm,
+            @RequestParam(required = false) Double verticalSpacingMm,
+            @RequestParam(required = false) String sides,
+            @RequestParam(required = false) String printMode,
+            @RequestParam(required = false) Boolean showCropMarks,
+            @RequestParam(required = false) Boolean showCutGuides,
+            @RequestParam(required = false) Boolean autoCenter
+    ) {
+        PrintSettingsDto override = null;
+        if (paperSize != null || columns != null || rows != null || horizontalSpacingMm != null || sides != null || printMode != null) {
+            override = new PrintSettingsDto(
+                    printMode != null ? printMode : PrintSettingsDto.MODE_SHEET,
+                    paperSize != null ? paperSize : PrintSettingsDto.PAPER_A4,
+                    sides != null ? sides : PrintSettingsDto.SIDES_DUPLEX,
+                    columns,
+                    rows,
+                    horizontalSpacingMm != null ? horizontalSpacingMm : 2.0,
+                    verticalSpacingMm != null ? verticalSpacingMm : 2.0,
+                    10.0, 10.0, 10.0, 10.0,
+                    autoCenter != null ? autoCenter : true,
+                    showCropMarks != null ? showCropMarks : true,
+                    showCutGuides != null ? showCutGuides : true,
+                    false
+            );
+        }
+        byte[] imageBytes = orderService.renderOrderCustomImpositionImage(id, side, override);
+        String filename = "order_" + id + "_sheet_" + (side != null ? side.toLowerCase() : "front") + ".jpg";
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(imageBytes);
+    }
+
+    @GetMapping("/{id}/print-plastic-pdf")
+    @Operation(summary = "Download direct plastic card PDF", description = "Generates print-ready PDF for CR80 PVC thermal card printers (1 card per page)")
+    public ResponseEntity<byte[]> downloadOrderPlasticCardsPdf(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "DUPLEX") String sides
+    ) {
+        byte[] pdfBytes = orderService.renderOrderPlasticCardsPdf(id, sides);
+        String filename = "order_" + id + "_plastic_cr80.pdf";
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
                 .body(pdfBytes);
     }
 

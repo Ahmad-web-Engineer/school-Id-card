@@ -1,5 +1,6 @@
 package com.platform.idcard.agencyjob.dto;
 
+import com.platform.idcard.template.dto.PrintSettingsDto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;
@@ -24,5 +25,19 @@ public record AgencyAssignmentItemRequest(
 
         @NotEmpty(message = "At least one job item must be allocated")
         @Valid
-        List<JobItemAllocationRequest> jobItems
-) {}
+        List<JobItemAllocationRequest> jobItems,
+
+        PrintSettingsDto printSettings,
+
+        Boolean allowAgencyOverride
+) {
+    public AgencyAssignmentItemRequest(
+            UUID agencyId,
+            LocalDate expectedDeliveryDate,
+            BigDecimal agreedRate,
+            String notes,
+            List<JobItemAllocationRequest> jobItems
+    ) {
+        this(agencyId, expectedDeliveryDate, agreedRate, notes, jobItems, null, false);
+    }
+}

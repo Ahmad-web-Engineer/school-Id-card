@@ -64,6 +64,12 @@ public class AgencyAssignment {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
+    @Column(name = "print_settings_json", columnDefinition = "TEXT")
+    private String printSettingsJson;
+
+    @Column(name = "allow_agency_override", nullable = false)
+    private boolean allowAgencyOverride = false;
+
     @OneToMany(mappedBy = "assignment", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<AgencyJobItem> items = new ArrayList<>();
 
@@ -215,5 +221,21 @@ public class AgencyAssignment {
 
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getPrintSettingsJson() {
+        return printSettingsJson;
+    }
+
+    public void setPrintSettingsJson(String printSettingsJson) {
+        this.printSettingsJson = printSettingsJson;
+    }
+
+    public boolean isAllowAgencyOverride() {
+        return allowAgencyOverride;
+    }
+
+    public void setAllowAgencyOverride(boolean allowAgencyOverride) {
+        this.allowAgencyOverride = allowAgencyOverride;
     }
 }

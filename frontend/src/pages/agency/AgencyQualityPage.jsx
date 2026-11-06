@@ -46,12 +46,13 @@ export default function AgencyQualityPage() {
   });
 
   // Fetch full details of current job for live card proof inspection
-  const { data: currentJobDetail } = useQuery({
+  const { data: currentJobDetail, isLoading: jobDetailLoading } = useQuery({
     queryKey: ['agency-job-detail-qc', currentJobId],
     queryFn: async () => {
       if (!currentJobId) return null;
       const res = await api.get(`/agency/jobs/${currentJobId}`);
-      return res.data?.data || null;
+      const payload = res?.data !== undefined ? res.data : res;
+      return payload?.data !== undefined ? payload.data : payload;
     },
     enabled: !!currentJobId,
   });
@@ -241,6 +242,7 @@ export default function AgencyQualityPage() {
         job={currentJobDetail || selectedJob}
         students={currentJobDetail?.students}
         cardSpecs={currentJobDetail?.cardSpecifications}
+        isLoadingStudents={jobDetailLoading}
       />
     </div>
   );

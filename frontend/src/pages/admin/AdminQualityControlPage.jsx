@@ -101,12 +101,13 @@ export default function AdminQualityControlPage() {
   const effectiveAssignmentId = selectedAssignmentId || assignments[0]?.id;
 
   // Fetch full details of the chosen assignment (includes student cards and specs)
-  const { data: assignmentDetailRes } = useQuery({
+  const { data: assignmentDetailRes, isLoading: assignmentDetailLoading } = useQuery({
     queryKey: ['admin-assignment-detail-qc', effectiveAssignmentId],
     queryFn: async () => {
       if (!effectiveAssignmentId) return null;
       const res = await api.get(`/admin/assignments/${effectiveAssignmentId}`);
-      return res.data?.data || null;
+      const payload = res?.data !== undefined ? res.data : res;
+      return payload?.data !== undefined ? payload.data : payload;
     },
     enabled: !!effectiveAssignmentId && isSubmitQcOpen,
   });
@@ -627,6 +628,7 @@ export default function AdminQualityControlPage() {
         assignment={assignmentDetailRes || activeSelectedAssignment}
         students={assignmentDetailRes?.students}
         cardSpecs={assignmentDetailRes?.specs}
+        isLoadingStudents={assignmentDetailLoading}
       />
     </div>
   );
