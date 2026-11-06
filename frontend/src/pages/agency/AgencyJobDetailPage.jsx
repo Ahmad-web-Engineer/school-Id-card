@@ -111,7 +111,7 @@ export default function AgencyJobDetailPage() {
     try {
       setIsDownloadingPdf(true);
       setActionError(null);
-      const res = await api.get(`/agency/jobs/${id}/print-pdf`, { responseType: 'blob' });
+      const res = await api.get(`/agency/jobs/${id}/print-pdf`, { responseType: 'blob', timeout: 180000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -122,7 +122,7 @@ export default function AgencyJobDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to generate print-ready card PDF.');
+      setActionError(err.message || 'Failed to generate print-ready card PDF.');
     } finally {
       setIsDownloadingPdf(false);
     }
@@ -132,7 +132,7 @@ export default function AgencyJobDetailPage() {
     try {
       setIsDownloadingA4(true);
       setActionError(null);
-      const res = await api.get(`/agency/jobs/${id}/print-a4-sheet`, { responseType: 'blob' });
+      const res = await api.get(`/agency/jobs/${id}/print-a4-sheet`, { responseType: 'blob', timeout: 180000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -143,7 +143,7 @@ export default function AgencyJobDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to generate A4 imposition sheet PDF.');
+      setActionError(err.message || 'Failed to generate A4 imposition sheet PDF.');
     } finally {
       setIsDownloadingA4(false);
     }
@@ -153,7 +153,7 @@ export default function AgencyJobDetailPage() {
     try {
       setIsDownloadingA4Jpg(true);
       setActionError(null);
-      const res = await api.get(`/agency/jobs/${id}/print-a4-image?side=${side}`, { responseType: 'blob' });
+      const res = await api.get(`/agency/jobs/${id}/print-a4-image?side=${side}`, { responseType: 'blob', timeout: 180000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'image/jpeg' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -164,7 +164,7 @@ export default function AgencyJobDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to download A4 sheet JPEG image.');
+      setActionError(err.message || 'Failed to download A4 sheet JPEG image.');
     } finally {
       setIsDownloadingA4Jpg(false);
     }
@@ -174,7 +174,7 @@ export default function AgencyJobDetailPage() {
     try {
       setIsDownloadingZip(true);
       setActionError(null);
-      const res = await api.get(`/agency/jobs/${id}/download-images`, { responseType: 'blob' });
+      const res = await api.get(`/agency/jobs/${id}/download-images`, { responseType: 'blob', timeout: 180000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/zip' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -185,7 +185,7 @@ export default function AgencyJobDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to generate high-resolution JPEG ZIP archive.');
+      setActionError(err.message || 'Failed to generate high-resolution JPEG ZIP archive.');
     } finally {
       setIsDownloadingZip(false);
     }
@@ -196,7 +196,7 @@ export default function AgencyJobDetailPage() {
     try {
       setDownloadingStudentId(studentId);
       setActionError(null);
-      const res = await api.get(`/agency/jobs/${id}/students/${studentId}/print-pdf`, { responseType: 'blob' });
+      const res = await api.get(`/agency/jobs/${id}/students/${studentId}/print-pdf`, { responseType: 'blob', timeout: 60000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -207,7 +207,7 @@ export default function AgencyJobDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to generate single student ID card PDF.');
+      setActionError(err.message || 'Failed to generate single student ID card PDF.');
     } finally {
       setDownloadingStudentId(null);
     }
@@ -218,7 +218,7 @@ export default function AgencyJobDetailPage() {
     try {
       setDownloadingImageStudentId(studentId);
       setActionError(null);
-      const res = await api.get(`/agency/jobs/${id}/students/${studentId}/download-image?side=${side}`, { responseType: 'blob' });
+      const res = await api.get(`/agency/jobs/${id}/students/${studentId}/download-image?side=${side}`, { responseType: 'blob', timeout: 60000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'image/jpeg' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -229,7 +229,7 @@ export default function AgencyJobDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to download student JPEG image.');
+      setActionError(err.message || 'Failed to download student JPEG image.');
     } finally {
       setDownloadingImageStudentId(null);
     }

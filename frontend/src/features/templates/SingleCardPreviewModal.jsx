@@ -47,7 +47,7 @@ export default function SingleCardPreviewModal({
     try {
       setIsDownloadingImage(true);
       const studentId = student.studentId || student.id;
-      const res = await api.get(`/agency/jobs/${jobId}/students/${studentId}/download-image?side=${activeSide}`, { responseType: 'blob' });
+      const res = await api.get(`/agency/jobs/${jobId}/students/${studentId}/download-image?side=${activeSide}`, { responseType: 'blob', timeout: 60000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'image/jpeg' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');

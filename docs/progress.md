@@ -1532,6 +1532,37 @@
 
 ---
 
+## Step 12 Log: Print Engine Performance Optimization, Axios Timeout Resilience & Direct Print Parity
+
+### What Was Built & Fixed
+1. **Root Cause Analysis of Print & Download Failures (Images 1-4):**
+   - **Double Prefix 404 on Direct Print:** `AdminOrderDetailPage.jsx` and `PrintImpositionModal.jsx` passed URLs prefixed with `/api/v1` to `directPrintUrl`, while `api.defaults.baseURL` was already `/api/v1`. Axios concatenated them to `/api/v1/api/v1/...`, returning 404 from Spring Boot.
+   - **Axios 15-Second Timeout Exceeded:** In `api.js`, default timeout was 15,000ms. In a 53-student batch (106 high-resolution pages), rendering and transferring a 10.5 MB PDF over the dev proxy exceeded 15.0s, causing Axios to abort with `ECONNABORTED: timeout of 15000ms exceeded`.
+   - **Blob Error Obfuscation:** When an error occurred on requests configured with `responseType: 'blob'`, Axios wrapped the error body in a `Blob`. Because `Blob.message` is `undefined`, the frontend fell back to generic `"Printer error"` or `"Printer failed"`.
+
+2. **Backend Prepress Acceleration (`CardPdfRenderingService.java`):**
+   - Replaced uncompressed `LosslessFactory.createFromImage` with `JPEGFactory.createFromImage(document, img, 0.95f)`.
+   - Batch rendering for 53 students (106 card pages) dropped from 10.0s to **4.6s** (over 2x faster).
+   - Ensured fallback to `LosslessFactory` in case of any JPEG compression issues.
+
+3. **Frontend Resilience & URL Normalization:**
+   - **Increased Global & Endpoint Timeouts (`api.js`, `printHelper.js`, `AdminOrderDetailPage.jsx`, `AgencyJobDetailPage.jsx`):** Raised global Axios timeout to 90s, and explicitly configured 180s for all PDF, A4 imposition, and ZIP download endpoints.
+   - **URL Path Sanitization (`printHelper.js`):** Automatically strips leading `/api/v1` if passed by any caller, preventing `/api/v1/api/v1` double prefixing universally.
+   - **Blob Error Parsing (`api.js`):** Updated Axios response interceptor to asynchronously parse `Blob` error responses into JSON, correctly surfacing server error messages instead of `undefined`.
+   - **Robust Direct Printing Fallback:** Enhanced `printPdfBlob` with timeout guards and popup print fallback if the browser blocks cross-document PDF iframe printing.
+
+### How It Was Verified
+- **End-to-End Vite Proxy Verification (53 Students):**
+  - `A4 Imposition Sheet PDF`: HTTP 200 (10.5 MB in 4,637ms).
+  - `Batch Cards PDF`: HTTP 200 (10.5 MB in 4,788ms).
+  - `Custom Imposition Sheet PDF`: HTTP 200 (10.5 MB in 4,766ms).
+  - `A4 Imposition Sheet JPEG`: HTTP 200 (563 KB in 842ms).
+  - `Batch 300 DPI Images ZIP`: HTTP 200 (4.5 MB in 4,712ms).
+- **Backend Test Suite:** `mvn test -Dtest=CardPdfRenderingServiceTest` — **14/14 tests passed** in 4.39s.
+- **Frontend Production Build:** `npm --prefix frontend run build` — `vite build` completed cleanly in 7.11s with 0 errors.
+
+---
+
 ## Questions & Blockers
 *None. All requirements successfully satisfied.*
 

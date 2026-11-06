@@ -21,6 +21,7 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.graphics.image.JPEGFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
@@ -140,6 +141,15 @@ public class CardPdfRenderingService {
      * Page 1 = Front side
      * Page 2 = Back side
      */
+    private PDImageXObject createCardPdfImage(PDDocument document, BufferedImage img) throws Exception {
+        if (img == null) return null;
+        try {
+            return JPEGFactory.createFromImage(document, img, 0.95f);
+        } catch (Exception e) {
+            return LosslessFactory.createFromImage(document, img);
+        }
+    }
+
     public byte[] renderCardPdf(
             CardTemplate template,
             TemplateVersion version,
@@ -169,7 +179,7 @@ public class CardPdfRenderingService {
             PDPage frontPage = new PDPage(pageSize);
             document.addPage(frontPage);
             try (PDPageContentStream stream = new PDPageContentStream(document, frontPage)) {
-                PDImageXObject pdFront = LosslessFactory.createFromImage(document, frontImg);
+                PDImageXObject pdFront = createCardPdfImage(document, frontImg);
                 stream.drawImage(pdFront, 0, 0, widthPt, heightPt);
                 addInvisibleTextLayer(stream, frontJson, true, effectiveStudent, effectiveSchool, effectiveSession, widthPt, heightPt);
             }
@@ -178,7 +188,7 @@ public class CardPdfRenderingService {
             PDPage backPage = new PDPage(pageSize);
             document.addPage(backPage);
             try (PDPageContentStream stream = new PDPageContentStream(document, backPage)) {
-                PDImageXObject pdBack = LosslessFactory.createFromImage(document, backImg);
+                PDImageXObject pdBack = createCardPdfImage(document, backImg);
                 stream.drawImage(pdBack, 0, 0, widthPt, heightPt);
                 addInvisibleTextLayer(stream, backJson, false, effectiveStudent, effectiveSchool, effectiveSession, widthPt, heightPt);
             }
@@ -230,7 +240,7 @@ public class CardPdfRenderingService {
                 PDPage frontPage = new PDPage(pageSize);
                 document.addPage(frontPage);
                 try (PDPageContentStream stream = new PDPageContentStream(document, frontPage)) {
-                    PDImageXObject pdFront = LosslessFactory.createFromImage(document, frontImg);
+                    PDImageXObject pdFront = createCardPdfImage(document, frontImg);
                     stream.drawImage(pdFront, 0, 0, widthPt, heightPt);
                     addInvisibleTextLayer(stream, frontJson, true, student, studentSchool, effectiveSession, widthPt, heightPt);
                 }
@@ -239,7 +249,7 @@ public class CardPdfRenderingService {
                 PDPage backPage = new PDPage(pageSize);
                 document.addPage(backPage);
                 try (PDPageContentStream stream = new PDPageContentStream(document, backPage)) {
-                    PDImageXObject pdBack = LosslessFactory.createFromImage(document, backImg);
+                    PDImageXObject pdBack = createCardPdfImage(document, backImg);
                     stream.drawImage(pdBack, 0, 0, widthPt, heightPt);
                     addInvisibleTextLayer(stream, backJson, false, student, studentSchool, effectiveSession, widthPt, heightPt);
                 }
@@ -300,7 +310,7 @@ public class CardPdfRenderingService {
                         document.addPage(frontPage);
                         try (PDPageContentStream stream = new PDPageContentStream(document, frontPage)) {
                             BufferedImage frontImg = renderCardToBufferedImage(template, version, student, studentSchool, effectiveSession, true);
-                            PDImageXObject pdFront = LosslessFactory.createFromImage(document, frontImg);
+                            PDImageXObject pdFront = createCardPdfImage(document, frontImg);
                             stream.drawImage(pdFront, 0, 0, cardWidthPt, cardHeightPt);
                             addInvisibleTextLayer(stream, version != null ? version.getFrontDesignJson() : null, true, student, studentSchool, effectiveSession, cardWidthPt, cardHeightPt);
                         }
@@ -311,7 +321,7 @@ public class CardPdfRenderingService {
                         document.addPage(backPage);
                         try (PDPageContentStream stream = new PDPageContentStream(document, backPage)) {
                             BufferedImage backImg = renderCardToBufferedImage(template, version, student, studentSchool, effectiveSession, false);
-                            PDImageXObject pdBack = LosslessFactory.createFromImage(document, backImg);
+                            PDImageXObject pdBack = createCardPdfImage(document, backImg);
                             stream.drawImage(pdBack, 0, 0, cardWidthPt, cardHeightPt);
                             addInvisibleTextLayer(stream, version != null ? version.getBackDesignJson() : null, false, student, studentSchool, effectiveSession, cardWidthPt, cardHeightPt);
                         }
@@ -393,7 +403,7 @@ public class CardPdfRenderingService {
                             }
 
                             BufferedImage cardImg = renderCardToBufferedImage(template, version, student, studentSchool, effectiveSession, true);
-                            PDImageXObject pdCard = LosslessFactory.createFromImage(document, cardImg);
+                            PDImageXObject pdCard = createCardPdfImage(document, cardImg);
                             stream.drawImage(pdCard, slotX, slotY, cardWidthPt, cardHeightPt);
 
                             stream.saveGraphicsState();
@@ -429,7 +439,7 @@ public class CardPdfRenderingService {
                             }
 
                             BufferedImage backCardImg = renderCardToBufferedImage(template, version, student, studentSchool, effectiveSession, false);
-                            PDImageXObject pdBackCard = LosslessFactory.createFromImage(document, backCardImg);
+                            PDImageXObject pdBackCard = createCardPdfImage(document, backCardImg);
                             stream.drawImage(pdBackCard, slotX, slotY, cardWidthPt, cardHeightPt);
 
                             stream.saveGraphicsState();

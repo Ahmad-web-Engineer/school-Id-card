@@ -6,7 +6,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  timeout: 15000,
+  timeout: 90000,
 });
 
 // Request interceptor: attach auth token if available
@@ -26,13 +26,30 @@ api.interceptors.response.use(
   (response) => {
     return response.data;
   },
-  (error) => {
-    const errorEnvelope = error.response?.data || {
+  async (error) => {
+    let errorEnvelope = {
       success: false,
       errorCode: error.code || 'UNKNOWN_ERROR',
       message: error.message || 'An unexpected network error occurred.',
       timestamp: new Date().toISOString(),
     };
+
+    if (error.response?.data) {
+      if (error.response.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text();
+          const json = JSON.parse(text);
+          if (json && json.message) {
+            errorEnvelope = json;
+          }
+        } catch (ignored) {
+          errorEnvelope.message = `Request failed with status ${error.response.status}`;
+        }
+      } else if (typeof error.response.data === 'object') {
+        errorEnvelope = error.response.data;
+      }
+    }
+
     return Promise.reject(errorEnvelope);
   }
 );

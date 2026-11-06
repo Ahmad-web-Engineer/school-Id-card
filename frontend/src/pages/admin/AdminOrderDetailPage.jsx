@@ -81,7 +81,7 @@ export default function AdminOrderDetailPage() {
     try {
       setIsDirectPrinting('a4');
       setActionError(null);
-      await directPrintUrl(`/api/v1/admin/orders/${id}/print-a4-sheet`, 'A4 Imposition Sheet');
+      await directPrintUrl(`/admin/orders/${id}/print-a4-sheet`, 'A4 Imposition Sheet');
     } catch (err) {
       setActionError('Direct print failed: ' + (err.message || 'Printer error'));
     } finally {
@@ -93,7 +93,7 @@ export default function AdminOrderDetailPage() {
     try {
       setIsDirectPrinting('cards');
       setActionError(null);
-      await directPrintUrl(`/api/v1/admin/orders/${id}/print-pdf`, 'Order Cards');
+      await directPrintUrl(`/admin/orders/${id}/print-pdf`, 'Order Cards');
     } catch (err) {
       setActionError('Direct print failed: ' + (err.message || 'Printer error'));
     } finally {
@@ -105,7 +105,7 @@ export default function AdminOrderDetailPage() {
     try {
       setIsDownloadingA4(true);
       setActionError(null);
-      const res = await api.get(`/admin/orders/${id}/print-a4-sheet`, { responseType: 'blob' });
+      const res = await api.get(`/admin/orders/${id}/print-a4-sheet`, { responseType: 'blob', timeout: 180000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -116,7 +116,7 @@ export default function AdminOrderDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to generate A4 imposition sheet PDF.');
+      setActionError(err.message || 'Failed to generate A4 imposition sheet PDF.');
     } finally {
       setIsDownloadingA4(false);
     }
@@ -126,7 +126,7 @@ export default function AdminOrderDetailPage() {
     try {
       setIsDownloadingA4Jpg(true);
       setActionError(null);
-      const res = await api.get(`/admin/orders/${id}/print-a4-image?side=${side}`, { responseType: 'blob' });
+      const res = await api.get(`/admin/orders/${id}/print-a4-image?side=${side}`, { responseType: 'blob', timeout: 180000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'image/jpeg' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -137,7 +137,7 @@ export default function AdminOrderDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to download A4 sheet JPEG image.');
+      setActionError(err.message || 'Failed to download A4 sheet JPEG image.');
     } finally {
       setIsDownloadingA4Jpg(false);
     }
@@ -147,7 +147,7 @@ export default function AdminOrderDetailPage() {
     try {
       setIsDownloadingZip(true);
       setActionError(null);
-      const res = await api.get(`/admin/orders/${id}/download-images`, { responseType: 'blob' });
+      const res = await api.get(`/admin/orders/${id}/download-images`, { responseType: 'blob', timeout: 180000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/zip' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -158,7 +158,7 @@ export default function AdminOrderDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to download card JPEG ZIP bundle.');
+      setActionError(err.message || 'Failed to download card JPEG ZIP bundle.');
     } finally {
       setIsDownloadingZip(false);
     }
@@ -169,7 +169,7 @@ export default function AdminOrderDetailPage() {
     try {
       setDownloadingImageStudentId(studentId);
       setActionError(null);
-      const res = await api.get(`/admin/orders/${id}/students/${studentId}/download-image?side=${side}`, { responseType: 'blob' });
+      const res = await api.get(`/admin/orders/${id}/students/${studentId}/download-image?side=${side}`, { responseType: 'blob', timeout: 60000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'image/jpeg' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -180,7 +180,7 @@ export default function AdminOrderDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to download student JPEG image.');
+      setActionError(err.message || 'Failed to download student JPEG image.');
     } finally {
       setDownloadingImageStudentId(null);
     }
@@ -191,9 +191,9 @@ export default function AdminOrderDetailPage() {
     try {
       setIsDirectPrinting(studentId);
       setActionError(null);
-      await directPrintUrl(`/api/v1/admin/orders/${id}/students/${studentId}/print-pdf`, `Student Card ${student.studentName}`);
+      await directPrintUrl(`/admin/orders/${id}/students/${studentId}/print-pdf`, `Student Card ${student.studentName}`);
     } catch (err) {
-      setActionError('Failed to print student card.');
+      setActionError('Failed to print student card: ' + (err.message || 'Printer error'));
     } finally {
       setIsDirectPrinting(null);
     }
@@ -203,8 +203,8 @@ export default function AdminOrderDetailPage() {
     try {
       setIsDownloadingPdf(true);
       setActionError(null);
-      const res = await api.get(`/admin/orders/${id}/print-pdf`, { responseType: 'blob' });
-      const blob = new Blob([res], { type: 'application/pdf' });
+      const res = await api.get(`/admin/orders/${id}/print-pdf`, { responseType: 'blob', timeout: 180000 });
+      const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -214,7 +214,7 @@ export default function AdminOrderDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to generate print-ready card PDF.');
+      setActionError(err.message || 'Failed to generate print-ready card PDF.');
     } finally {
       setIsDownloadingPdf(false);
     }
@@ -225,8 +225,8 @@ export default function AdminOrderDetailPage() {
     try {
       setDownloadingStudentId(studentId);
       setActionError(null);
-      const res = await api.get(`/admin/orders/${id}/students/${studentId}/print-pdf`, { responseType: 'blob' });
-      const blob = new Blob([res], { type: 'application/pdf' });
+      const res = await api.get(`/admin/orders/${id}/students/${studentId}/print-pdf`, { responseType: 'blob', timeout: 60000 });
+      const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -236,7 +236,7 @@ export default function AdminOrderDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to generate single student ID card PDF.');
+      setActionError(err.message || 'Failed to generate single student ID card PDF.');
     } finally {
       setDownloadingStudentId(null);
     }

@@ -191,7 +191,7 @@ export default function PrintImpositionModal({
       setActionError(null);
       const baseUrl = isAgency
         ? `/agency/jobs/${jobId}/print-sheet-pdf?${queryParams}`
-        : `/api/v1/admin/orders/${orderId}/print-sheet-pdf?${queryParams}`;
+        : `/admin/orders/${orderId}/print-sheet-pdf?${queryParams}`;
       await directPrintUrl(baseUrl, `Prepress ${identifierName || 'Sheet'}`);
     } catch (err) {
       setActionError('Direct print error: ' + (err.message || 'Printer failed'));
@@ -209,7 +209,7 @@ export default function PrintImpositionModal({
         ? `/agency/jobs/${jobId}/print-sheet-pdf?${queryParams}`
         : `/admin/orders/${orderId}/print-sheet-pdf?${queryParams}`;
 
-      const res = await api.get(endpoint, { responseType: 'blob' });
+      const res = await api.get(endpoint, { responseType: 'blob', timeout: 180000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -220,7 +220,7 @@ export default function PrintImpositionModal({
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to generate imposition sheet PDF.');
+      setActionError(err.message || 'Failed to generate imposition sheet PDF.');
     } finally {
       setDownloadingType(null);
     }
@@ -235,7 +235,7 @@ export default function PrintImpositionModal({
         ? `/agency/jobs/${jobId}/print-sheet-image?side=${previewSide}&${queryParams}`
         : `/admin/orders/${orderId}/print-sheet-image?side=${previewSide}&${queryParams}`;
 
-      const res = await api.get(endpoint, { responseType: 'blob' });
+      const res = await api.get(endpoint, { responseType: 'blob', timeout: 180000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'image/jpeg' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -246,7 +246,7 @@ export default function PrintImpositionModal({
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to download imposition sheet JPEG.');
+      setActionError(err.message || 'Failed to download imposition sheet JPEG.');
     } finally {
       setDownloadingType(null);
     }
@@ -261,7 +261,7 @@ export default function PrintImpositionModal({
         ? `/agency/jobs/${jobId}/print-plastic-pdf?sides=${sides}`
         : `/admin/orders/${orderId}/print-plastic-pdf?sides=${sides}`;
 
-      const res = await api.get(endpoint, { responseType: 'blob' });
+      const res = await api.get(endpoint, { responseType: 'blob', timeout: 180000 });
       const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -272,7 +272,7 @@ export default function PrintImpositionModal({
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setActionError('Failed to generate plastic cards PDF.');
+      setActionError(err.message || 'Failed to generate plastic cards PDF.');
     } finally {
       setDownloadingType(null);
     }
