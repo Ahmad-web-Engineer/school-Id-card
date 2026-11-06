@@ -5,6 +5,7 @@ import Select from '../../components/common/Select';
 import Textarea from '../../components/common/Textarea';
 import Button from '../../components/common/Button';
 import SingleCardPreviewModal from '../templates/SingleCardPreviewModal';
+import StudentPhotoAvatar from '../students/StudentPhotoAvatar';
 import { DEFECT_CATEGORIES } from './productionConstants';
 import {
   CheckCircle,
@@ -353,20 +354,11 @@ export default function SubmitQualityCheckModal({
                             <tr className={`transition-colors ${isDefect ? 'bg-rose-50/40' : isPassed ? 'bg-emerald-50/20' : 'hover:bg-slate-50'}`}>
                               <td className="py-2 px-3">
                                 <div className="flex items-center gap-2.5">
-                                  <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs overflow-hidden shrink-0">
-                                    {s.photoFileId ? (
-                                      <img
-                                        src={`/api/v1/files/${s.photoFileId}/download`}
-                                        alt={s.studentName}
-                                        className="w-full h-full object-cover"
-                                        onError={(e) => {
-                                          e.target.style.display = 'none';
-                                        }}
-                                      />
-                                    ) : (
-                                      (s.studentName || 'S').charAt(0)
-                                    )}
-                                  </div>
+                                  <StudentPhotoAvatar
+                                    photoFileId={s.photoFileId || s.photo_file_id}
+                                    name={s.studentName}
+                                    size="sm"
+                                  />
                                   <div className="min-w-0">
                                     <div className="font-semibold text-slate-900 truncate">
                                       {s.studentName}

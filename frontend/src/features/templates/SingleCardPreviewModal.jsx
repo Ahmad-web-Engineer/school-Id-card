@@ -101,6 +101,7 @@ export default function SingleCardPreviewModal({
   const widthMm = Number(cardSpecs?.widthMm || cardSpecs?.cardWidthMm || 85.6);
   const heightMm = Number(cardSpecs?.heightMm || cardSpecs?.cardHeightMm || 54.0);
   const bleedMarginMm = Number(cardSpecs?.bleedMarginMm || 3.0);
+  const authToken = localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
 
   // Normalise student snapshot fields for CardCanvas preview
   const previewStudent = {
@@ -116,9 +117,10 @@ export default function SingleCardPreviewModal({
     bloodGroup: student.bloodGroup || '-',
     emergencyContact: student.emergencyContact || '-',
     address: student.address || '-',
-    photoFileId: student.photoFileId || null,
-    schoolLogoFileId: cardSpecs?.schoolLogoFileId || student?.schoolLogoFileId || null,
-    signatureFileId: cardSpecs?.signatureFileId || student?.signatureFileId || null,
+    photoFileId: student.photoFileId || student.photo_file_id || student.photoId || null,
+    photoUrl: student.photoUrl || student.photo_url || null,
+    schoolLogoFileId: cardSpecs?.schoolLogoFileId || student?.schoolLogoFileId || student?.school_logo_file_id || cardSpecs?.logoFileId || null,
+    signatureFileId: cardSpecs?.signatureFileId || student?.signatureFileId || student?.signature_file_id || null,
     schoolName: cardSpecs?.schoolName || student?.schoolName || 'Greenwood International School',
     schoolCode: cardSpecs?.schoolCode || student?.schoolCode || 'GREENWOOD',
     schoolAddress: cardSpecs?.schoolAddress || student?.schoolAddress || 'Sarjapur Main Road, Bengaluru',
@@ -221,7 +223,7 @@ export default function SingleCardPreviewModal({
               <div className="w-12 h-12 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-base overflow-hidden">
                 {previewStudent.photoFileId ? (
                   <img
-                    src={`/api/v1/files/${previewStudent.photoFileId}/download`}
+                    src={`/api/v1/files/${previewStudent.photoFileId}${authToken ? `?token=${encodeURIComponent(authToken)}` : ''}`}
                     alt={previewStudent.studentName}
                     className="w-full h-full object-cover"
                     onError={(e) => {

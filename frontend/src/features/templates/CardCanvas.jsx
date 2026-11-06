@@ -118,29 +118,37 @@ export default function CardCanvas({
     }
   };
 
+  const getAuthToken = () => {
+    return localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
+  };
+
   // Helper to resolve image source
   const getPhotoSrc = () => {
     if (!activeStudentData) return null;
-    if (activeStudentData.photoFileId) {
-      return `/api/v1/files/${activeStudentData.photoFileId}/download`;
+    const photoId = activeStudentData.photoFileId || activeStudentData.photo_file_id || activeStudentData.photoId;
+    if (photoId) {
+      const token = getAuthToken();
+      return `/api/v1/files/${photoId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
     }
     return activeStudentData.photo_url || activeStudentData.photoUrl || null;
   };
 
   const getLogoSrc = () => {
     if (!activeStudentData) return null;
-    const logoId = activeStudentData.schoolLogoFileId || activeStudentData.logoFileId;
+    const logoId = activeStudentData.schoolLogoFileId || activeStudentData.logoFileId || activeStudentData.school_logo_file_id || activeStudentData.logo_file_id;
     if (logoId) {
-      return `/api/v1/files/${logoId}/download`;
+      const token = getAuthToken();
+      return `/api/v1/files/${logoId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
     }
-    return activeStudentData.school_logo_url || activeStudentData.logoUrl || null;
+    return activeStudentData.school_logo_url || activeStudentData.logoUrl || activeStudentData.schoolLogoUrl || null;
   };
 
   const getSignatureSrc = () => {
     if (!activeStudentData) return null;
-    const signId = activeStudentData.signatureFileId;
+    const signId = activeStudentData.signatureFileId || activeStudentData.signature_file_id;
     if (signId) {
-      return `/api/v1/files/${signId}/download`;
+      const token = getAuthToken();
+      return `/api/v1/files/${signId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
     }
     return activeStudentData.signature_url || activeStudentData.signatureUrl || null;
   };
@@ -321,14 +329,28 @@ export default function CardCanvas({
                         <div className="text-[7px] text-slate-400 font-medium">Signature</div>
                       )
                     ) : photoSrc ? (
-                      <img
-                        src={photoSrc}
-                        alt="Student"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
+                      <>
+                        <img
+                          src={photoSrc}
+                          alt="Student"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            if (e.currentTarget.nextElementSibling) {
+                              e.currentTarget.nextElementSibling.style.display = 'flex';
+                            }
+                          }}
+                        />
+                        <div
+                          style={{ display: 'none' }}
+                          className="w-full h-full flex flex-col items-center justify-center p-1 text-slate-400"
+                        >
+                          <User className="w-8 h-8 text-slate-300 stroke-[1.5]" />
+                          <span className="text-[7px] text-slate-400 font-medium tracking-tight mt-0.5">
+                            {shape === 'circle' ? 'Round Photo' : shape === 'pill' ? 'Pill Photo' : 'Photo Frame'}
+                          </span>
+                        </div>
+                      </>
                     ) : (
                       <div className="flex flex-col items-center justify-center p-1 text-slate-400">
                         <User className="w-8 h-8 text-slate-300 stroke-[1.5]" />

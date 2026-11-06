@@ -56,6 +56,7 @@ export default function AgencyJobDetailPage() {
   const [directPrintingStudentId, setDirectPrintingStudentId] = useState(null);
   const [downloadingImageStudentId, setDownloadingImageStudentId] = useState(null);
   const [isDownloadingA4Jpg, setIsDownloadingA4Jpg] = useState(false);
+  const authToken = localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
 
   // Direct Print Handlers
   const handleDirectPrintA4 = async () => {
@@ -712,9 +713,9 @@ export default function AgencyJobDetailPage() {
                   >
                     <div className="flex items-start gap-3">
                       <div className="w-12 h-14 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-indigo-700 text-sm overflow-hidden shrink-0 shadow-xs">
-                        {s.photoFileId ? (
+                        {s.photoFileId || s.photo_file_id ? (
                           <img
-                            src={`/api/v1/files/${s.photoFileId}/download`}
+                            src={`/api/v1/files/${s.photoFileId || s.photo_file_id}${authToken ? `?token=${encodeURIComponent(authToken)}` : ''}`}
                             alt={s.studentName}
                             className="w-full h-full object-cover"
                             onError={(e) => {
@@ -843,9 +844,9 @@ export default function AgencyJobDetailPage() {
                         <td className="py-2 px-3">
                           <div className="flex items-center gap-2">
                             <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs overflow-hidden shrink-0">
-                              {s.photoFileId ? (
+                              {s.photoFileId || s.photo_file_id ? (
                                 <img
-                                  src={`/api/v1/files/${s.photoFileId}/download`}
+                                  src={`/api/v1/files/${s.photoFileId || s.photo_file_id}${authToken ? `?token=${encodeURIComponent(authToken)}` : ''}`}
                                   alt={s.studentName}
                                   className="w-full h-full object-cover"
                                   onError={(e) => {

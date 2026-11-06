@@ -26,6 +26,9 @@ public interface AgencyAssignmentRepository extends JpaRepository<AgencyAssignme
 
     boolean existsByAssignmentNumber(String assignmentNumber);
 
+    @Query("SELECT COUNT(a) > 0 FROM AgencyAssignment a WHERE a.agency.id = :agencyId AND a.order.school.id = :schoolId")
+    boolean existsByAgencyIdAndSchoolId(@Param("agencyId") UUID agencyId, @Param("schoolId") UUID schoolId);
+
     @Query("""
         SELECT a FROM AgencyAssignment a
         WHERE (:orderId IS NULL OR a.order.id = :orderId)

@@ -14,6 +14,7 @@ export default function SinglePhotoUpload({
   const fileInputRef = useRef(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [fileError, setFileError] = useState('');
+  const authToken = localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
 
   // Handle local preview for newly chosen file
   useEffect(() => {
@@ -81,7 +82,7 @@ export default function SinglePhotoUpload({
           ) : currentPhotoFileId ? (
             <div className="flex flex-col items-center">
               <img
-                src={`/api/v1/files/${currentPhotoFileId}`}
+                src={`/api/v1/files/${currentPhotoFileId}${authToken ? `?token=${encodeURIComponent(authToken)}` : ''}`}
                 alt={`${studentName || 'Student'} photo`}
                 className="w-16 h-20 sm:w-20 sm:h-24 rounded-md object-cover border border-slate-300 shadow-xs"
                 onError={(e) => {

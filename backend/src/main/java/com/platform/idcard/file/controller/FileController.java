@@ -1,5 +1,6 @@
 package com.platform.idcard.file.controller;
 
+import com.platform.idcard.agencyjob.repository.AgencyAssignmentRepository;
 import com.platform.idcard.auth.security.SecurityUtils;
 import com.platform.idcard.common.exception.ApiException;
 import com.platform.idcard.common.exception.ErrorCode;
@@ -26,12 +27,14 @@ import java.util.UUID;
 public class FileController {
 
     private final FileStorageService fileStorageService;
+    private final AgencyAssignmentRepository agencyAssignmentRepository;
 
-    public FileController(FileStorageService fileStorageService) {
+    public FileController(FileStorageService fileStorageService, AgencyAssignmentRepository agencyAssignmentRepository) {
         this.fileStorageService = fileStorageService;
+        this.agencyAssignmentRepository = agencyAssignmentRepository;
     }
 
-    @GetMapping("/{fileId}")
+    @GetMapping(value = {"/{fileId}", "/{fileId}/download"})
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'SCHOOL', 'PRINTING_AGENCY')")
     @Operation(summary = "View or download a stored file with tenant access checks")
     public ResponseEntity<Resource> getFile(@PathVariable UUID fileId) {
@@ -50,13 +53,17 @@ public class FileController {
                 );
             }
         } else if (SecurityUtils.isAgencyUser()) {
-            // Printing Agency access will be validated against assigned agency jobs in later steps.
-            // If the file is not explicitly associated with an agency job or school is private, forbid.
-            throw new ApiException(
-                    ErrorCode.ACCESS_DENIED,
-                    "Access denied: Agency is not authorized to access this file.",
-                    HttpStatus.FORBIDDEN
-            );
+            UUID agencyId = SecurityUtils.getRequiredAgencyId();
+            if (fileEntity.getSchool() != null) {
+                boolean hasAssignment = agencyAssignmentRepository.existsByAgencyIdAndSchoolId(agencyId, fileEntity.getSchool().getId());
+                if (!hasAssignment) {
+                    throw new ApiException(
+                            ErrorCode.ACCESS_DENIED,
+                            "Access denied: Agency is not authorized to access files for this school.",
+                            HttpStatus.FORBIDDEN
+                    );
+                }
+            }
         } else {
             throw new ApiException(
                     ErrorCode.ACCESS_DENIED,

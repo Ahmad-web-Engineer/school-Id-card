@@ -2383,6 +2383,7 @@ public class CardPdfRenderingService {
         s.setMobile("9876543210");
         s.setEmergencyContact("9876543219");
         s.setStatus("ACTIVE");
+        s.setPhotoFileId(UUID.fromString("f0d479ad-456c-48e6-8fa8-1eb90505ba6c"));
         if (school != null) {
             s.setSchool(school);
         }

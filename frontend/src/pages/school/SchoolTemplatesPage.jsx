@@ -122,8 +122,9 @@ export default function SchoolTemplatesPage() {
         school_name: schoolProfile?.schoolName || 'High School',
         school_address: `${schoolProfile?.address || ''}, ${schoolProfile?.city || ''}`,
         academic_session: '2026-2027',
-        photo_url: chosenStudent.photoFileId
-          ? `/api/v1/files/${chosenStudent.photoFileId}`
+        photoFileId: chosenStudent.photoFileId || chosenStudent.photo_file_id || null,
+        photo_url: (chosenStudent.photoFileId || chosenStudent.photo_file_id)
+          ? `/api/v1/files/${chosenStudent.photoFileId || chosenStudent.photo_file_id}${localStorage.getItem('auth_token') ? `?token=${encodeURIComponent(localStorage.getItem('auth_token'))}` : ''}`
           : null,
       }
     : SAMPLE_STUDENT_DATA;

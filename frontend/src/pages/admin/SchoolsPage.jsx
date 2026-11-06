@@ -210,30 +210,34 @@ export default function SchoolsPage() {
     {
       key: 'schoolName',
       label: 'School Institution',
-      render: (val, row) => (
-        <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-md border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
-            {row.logoFileId ? (
-              <img
-                src={`/api/v1/files/${row.logoFileId}`}
-                alt={val}
-                className="h-full w-full object-contain p-0.5"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            ) : (
-              <span className="text-xs font-bold text-slate-400 bg-slate-50 h-full w-full flex items-center justify-center">
-                {val ? val.charAt(0).toUpperCase() : 'S'}
-              </span>
-            )}
+      render: (val, row) => {
+        const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
+        const logoUrl = row.logoFileId ? `/api/v1/files/${row.logoFileId}${token ? `?token=${encodeURIComponent(token)}` : ''}` : null;
+        return (
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-md border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={val}
+                  className="h-full w-full object-contain p-0.5"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <span className="text-xs font-bold text-slate-400 bg-slate-50 h-full w-full flex items-center justify-center">
+                  {val ? val.charAt(0).toUpperCase() : 'S'}
+                </span>
+              )}
+            </div>
+            <div>
+              <div className="font-semibold text-slate-900">{val}</div>
+              <div className="text-[11px] text-slate-500">{row.city || '—'}, {row.state || '—'}</div>
+            </div>
           </div>
-          <div>
-            <div className="font-semibold text-slate-900">{val}</div>
-            <div className="text-[11px] text-slate-500">{row.city || '—'}, {row.state || '—'}</div>
-          </div>
-        </div>
-      ),
+        );
+      },
     },
     { key: 'email', label: 'Contact Email' },
     { key: 'mobile', label: 'Phone' },
@@ -257,7 +261,8 @@ export default function SchoolsPage() {
             onClick={() => {
               setSelectedSchool(row);
               setLogoFile(null);
-              setLogoPreviewUrl(row.logoFileId ? `/api/v1/files/${row.logoFileId}` : '');
+              const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
+              setLogoPreviewUrl(row.logoFileId ? `/api/v1/files/${row.logoFileId}${token ? `?token=${encodeURIComponent(token)}` : ''}` : '');
               setLogoError('');
               setIsLogoModalOpen(true);
             }}
