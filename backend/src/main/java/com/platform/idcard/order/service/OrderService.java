@@ -697,20 +697,25 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public byte[] renderOrderCardsPdf(UUID orderId) {
+        return renderOrderCardsPdf(orderId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderCardsPdf(UUID orderId, List<UUID> studentIds) {
         PrintingOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Printing order not found with ID: " + orderId));
-        return renderCardsPdfInternal(order);
+        return renderCardsPdfInternal(order, studentIds);
     }
 
     @Transactional(readOnly = true)
     public byte[] renderSchoolOrderCardsPdf(UUID orderId, UUID schoolId) {
         PrintingOrder order = orderRepository.findByIdAndSchoolId(orderId, schoolId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found or access denied"));
-        return renderCardsPdfInternal(order);
+        return renderCardsPdfInternal(order, null);
     }
 
-    private byte[] renderCardsPdfInternal(PrintingOrder order) {
-        OrderRenderContext ctx = loadOrderRenderContext(order);
+    private byte[] renderCardsPdfInternal(PrintingOrder order, List<UUID> studentIds) {
+        OrderRenderContext ctx = loadOrderRenderContext(order, studentIds);
         return cardPdfRenderingService.renderBatchPdf(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session());
     }
 
@@ -723,6 +728,10 @@ public class OrderService {
     ) {}
 
     private OrderRenderContext loadOrderRenderContext(PrintingOrder order) {
+        return loadOrderRenderContext(order, null);
+    }
+
+    private OrderRenderContext loadOrderRenderContext(PrintingOrder order, List<UUID> studentIds) {
         TemplateVersion version = order.getTemplateVersion();
         if (version == null) {
             throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "Order does not have an associated template version");
@@ -732,6 +741,13 @@ public class OrderService {
         String session = order.getAcademicSession();
 
         List<OrderStudentItem> items = orderStudentItemRepository.findByOrderId(order.getId());
+        if (studentIds != null && !studentIds.isEmpty()) {
+            java.util.Set<UUID> idSet = new java.util.HashSet<>(studentIds);
+            items = items.stream()
+                    .filter(it -> (it.getStudent() != null && idSet.contains(it.getStudent().getId())) || idSet.contains(it.getId()))
+                    .toList();
+        }
+
         List<Student> students = new ArrayList<>();
         for (OrderStudentItem item : items) {
             Student s = item.getStudent();
@@ -797,9 +813,14 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public byte[] renderOrderCustomImpositionPdf(UUID orderId, PrintSettingsDto overrideSettings) {
+        return renderOrderCustomImpositionPdf(orderId, overrideSettings, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderCustomImpositionPdf(UUID orderId, PrintSettingsDto overrideSettings, List<UUID> studentIds) {
         PrintingOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
-        OrderRenderContext ctx = loadOrderRenderContext(order);
+        OrderRenderContext ctx = loadOrderRenderContext(order, studentIds);
         boolean isPortrait = ctx.version() == null || ctx.version().getCardHeightMm() == null || ctx.version().getCardWidthMm() == null ||
                 ctx.version().getCardHeightMm().compareTo(ctx.version().getCardWidthMm()) >= 0;
         PrintSettingsDto effectiveSettings = overrideSettings != null
@@ -810,9 +831,14 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public byte[] renderOrderCustomImpositionImage(UUID orderId, String side, PrintSettingsDto overrideSettings) {
+        return renderOrderCustomImpositionImage(orderId, side, overrideSettings, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderCustomImpositionImage(UUID orderId, String side, PrintSettingsDto overrideSettings, List<UUID> studentIds) {
         PrintingOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
-        OrderRenderContext ctx = loadOrderRenderContext(order);
+        OrderRenderContext ctx = loadOrderRenderContext(order, studentIds);
         boolean isPortrait = ctx.version() == null || ctx.version().getCardHeightMm() == null || ctx.version().getCardWidthMm() == null ||
                 ctx.version().getCardHeightMm().compareTo(ctx.version().getCardWidthMm()) >= 0;
         PrintSettingsDto effectiveSettings = overrideSettings != null
@@ -823,9 +849,14 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public byte[] renderOrderPlasticCardsPdf(UUID orderId, String sides) {
+        return renderOrderPlasticCardsPdf(orderId, sides, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderPlasticCardsPdf(UUID orderId, String sides, List<UUID> studentIds) {
         PrintingOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
-        OrderRenderContext ctx = loadOrderRenderContext(order);
+        OrderRenderContext ctx = loadOrderRenderContext(order, studentIds);
         PrintSettingsDto plasticSettings = new PrintSettingsDto(
                 PrintSettingsDto.MODE_PLASTIC,
                 PrintSettingsDto.PAPER_CR80,
@@ -837,25 +868,40 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public byte[] renderOrderA4SheetPdf(UUID orderId) {
+        return renderOrderA4SheetPdf(orderId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderA4SheetPdf(UUID orderId, List<UUID> studentIds) {
         PrintingOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
-        OrderRenderContext ctx = loadOrderRenderContext(order);
+        OrderRenderContext ctx = loadOrderRenderContext(order, studentIds);
         return cardPdfRenderingService.renderA4SheetPdf(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session());
     }
 
     @Transactional(readOnly = true)
     public byte[] renderOrderA4SheetImage(UUID orderId, String side) {
+        return renderOrderA4SheetImage(orderId, side, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderA4SheetImage(UUID orderId, String side, List<UUID> studentIds) {
         PrintingOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
-        OrderRenderContext ctx = loadOrderRenderContext(order);
+        OrderRenderContext ctx = loadOrderRenderContext(order, studentIds);
         return cardPdfRenderingService.renderA4SheetImage(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session(), side);
     }
 
     @Transactional(readOnly = true)
     public byte[] renderOrderImagesZip(UUID orderId) {
+        return renderOrderImagesZip(orderId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderOrderImagesZip(UUID orderId, List<UUID> studentIds) {
         PrintingOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
-        OrderRenderContext ctx = loadOrderRenderContext(order);
+        OrderRenderContext ctx = loadOrderRenderContext(order, studentIds);
         return cardPdfRenderingService.renderJobImagesZip(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session());
     }
 

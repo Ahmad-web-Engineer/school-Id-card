@@ -16,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -84,9 +85,12 @@ public class AdminOrderController {
     }
 
     @GetMapping("/{id}/print-pdf")
-    @Operation(summary = "Download print-ready order cards PDF", description = "Generates high-resolution multi-page PDF with all student cards in the order")
-    public ResponseEntity<byte[]> downloadOrderPrintPdf(@PathVariable UUID id) {
-        byte[] pdfBytes = orderService.renderOrderCardsPdf(id);
+    @Operation(summary = "Download print-ready order cards PDF", description = "Generates high-resolution multi-page PDF with all or selected student cards in the order")
+    public ResponseEntity<byte[]> downloadOrderPrintPdf(
+            @PathVariable UUID id,
+            @RequestParam(required = false) List<UUID> studentIds
+    ) {
+        byte[] pdfBytes = orderService.renderOrderCardsPdf(id, studentIds);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"order_cards_" + id + ".pdf\"")
@@ -133,7 +137,8 @@ public class AdminOrderController {
             @RequestParam(required = false) String printMode,
             @RequestParam(required = false) Boolean showCropMarks,
             @RequestParam(required = false) Boolean showCutGuides,
-            @RequestParam(required = false) Boolean autoCenter
+            @RequestParam(required = false) Boolean autoCenter,
+            @RequestParam(required = false) List<UUID> studentIds
     ) {
         PrintSettingsDto override = null;
         if (paperSize != null || columns != null || rows != null || horizontalSpacingMm != null || sides != null || printMode != null) {
@@ -152,7 +157,7 @@ public class AdminOrderController {
                     false
             );
         }
-        byte[] pdfBytes = orderService.renderOrderCustomImpositionPdf(id, override);
+        byte[] pdfBytes = orderService.renderOrderCustomImpositionPdf(id, override, studentIds);
         String filename = "order_" + id + "_sheet.pdf";
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
@@ -205,9 +210,10 @@ public class AdminOrderController {
     @Operation(summary = "Download direct plastic card PDF", description = "Generates print-ready PDF for CR80 PVC thermal card printers (1 card per page)")
     public ResponseEntity<byte[]> downloadOrderPlasticCardsPdf(
             @PathVariable UUID id,
-            @RequestParam(defaultValue = "DUPLEX") String sides
+            @RequestParam(defaultValue = "DUPLEX") String sides,
+            @RequestParam(required = false) List<UUID> studentIds
     ) {
-        byte[] pdfBytes = orderService.renderOrderPlasticCardsPdf(id, sides);
+        byte[] pdfBytes = orderService.renderOrderPlasticCardsPdf(id, sides, studentIds);
         String filename = "order_" + id + "_plastic_cr80.pdf";
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
@@ -217,8 +223,11 @@ public class AdminOrderController {
 
     @GetMapping("/{id}/print-a4-sheet")
     @Operation(summary = "Download A4 imposition sheet PDF", description = "Generates multi-page A4 imposition sheet PDF with duplex column mirroring for production printing")
-    public ResponseEntity<byte[]> downloadOrderA4SheetPdf(@PathVariable UUID id) {
-        byte[] pdfBytes = orderService.renderOrderA4SheetPdf(id);
+    public ResponseEntity<byte[]> downloadOrderA4SheetPdf(
+            @PathVariable UUID id,
+            @RequestParam(required = false) List<UUID> studentIds
+    ) {
+        byte[] pdfBytes = orderService.renderOrderA4SheetPdf(id, studentIds);
         String filename = "order_" + id + "_a4_sheet.pdf";
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
@@ -242,8 +251,11 @@ public class AdminOrderController {
 
     @GetMapping("/{id}/download-images")
     @Operation(summary = "Download high-resolution JPEG images ZIP", description = "Exports 300 DPI JPEG cards in a zip archive")
-    public ResponseEntity<byte[]> downloadOrderImagesZip(@PathVariable UUID id) {
-        byte[] zipBytes = orderService.renderOrderImagesZip(id);
+    public ResponseEntity<byte[]> downloadOrderImagesZip(
+            @PathVariable UUID id,
+            @RequestParam(required = false) List<UUID> studentIds
+    ) {
+        byte[] zipBytes = orderService.renderOrderImagesZip(id, studentIds);
         String filename = "order_" + id + "_cards_jpeg.zip";
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("application/zip"))

@@ -691,6 +691,10 @@ public class AgencyJobService {
     private record JobRenderContext(CardTemplate template, TemplateVersion version, List<Student> students, School school, String session) {}
 
     private JobRenderContext loadJobRenderContext(UUID jobId, UUID agencyId) {
+        return loadJobRenderContext(jobId, agencyId, null);
+    }
+
+    private JobRenderContext loadJobRenderContext(UUID jobId, UUID agencyId, List<UUID> studentIds) {
         AgencyAssignment assignment = agencyAssignmentRepository.findByIdAndAgencyId(jobId, agencyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Job assignment not found with ID: " + jobId));
 
@@ -704,6 +708,13 @@ public class AgencyJobService {
         String session = order.getAcademicSession();
 
         List<OrderStudentItem> items = orderStudentItemRepository.findByOrderId(order.getId());
+        if (studentIds != null && !studentIds.isEmpty()) {
+            java.util.Set<UUID> idSet = new java.util.HashSet<>(studentIds);
+            items = items.stream()
+                    .filter(it -> (it.getStudent() != null && idSet.contains(it.getStudent().getId())) || idSet.contains(it.getId()))
+                    .toList();
+        }
+
         List<Student> students = new ArrayList<>();
         for (OrderStudentItem item : items) {
             Student s = item.getStudent();
@@ -803,7 +814,12 @@ public class AgencyJobService {
 
     @Transactional(readOnly = true)
     public byte[] renderJobCustomImpositionPdf(UUID jobId, UUID agencyId, PrintSettingsDto overrideSettings) {
-        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        return renderJobCustomImpositionPdf(jobId, agencyId, overrideSettings, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobCustomImpositionPdf(UUID jobId, UUID agencyId, PrintSettingsDto overrideSettings, List<UUID> studentIds) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId, studentIds);
         AgencyAssignment assignment = agencyAssignmentRepository.findByIdAndAgencyId(jobId, agencyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Job assignment not found with ID: " + jobId));
         boolean isPortrait = ctx.version() == null || ctx.version().getCardHeightMm() == null || ctx.version().getCardWidthMm() == null ||
@@ -820,7 +836,12 @@ public class AgencyJobService {
 
     @Transactional(readOnly = true)
     public byte[] renderJobCustomImpositionImage(UUID jobId, UUID agencyId, String side, PrintSettingsDto overrideSettings) {
-        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        return renderJobCustomImpositionImage(jobId, agencyId, side, overrideSettings, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobCustomImpositionImage(UUID jobId, UUID agencyId, String side, PrintSettingsDto overrideSettings, List<UUID> studentIds) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId, studentIds);
         AgencyAssignment assignment = agencyAssignmentRepository.findByIdAndAgencyId(jobId, agencyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Job assignment not found with ID: " + jobId));
         boolean isPortrait = ctx.version() == null || ctx.version().getCardHeightMm() == null || ctx.version().getCardWidthMm() == null ||
@@ -837,7 +858,12 @@ public class AgencyJobService {
 
     @Transactional(readOnly = true)
     public byte[] renderJobPlasticCardsPdf(UUID jobId, UUID agencyId, String sides) {
-        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        return renderJobPlasticCardsPdf(jobId, agencyId, sides, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobPlasticCardsPdf(UUID jobId, UUID agencyId, String sides, List<UUID> studentIds) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId, studentIds);
         PrintSettingsDto plasticSettings = new PrintSettingsDto(
                 PrintSettingsDto.MODE_PLASTIC,
                 PrintSettingsDto.PAPER_CR80,
@@ -849,25 +875,45 @@ public class AgencyJobService {
 
     @Transactional(readOnly = true)
     public byte[] renderJobCardsPdf(UUID jobId, UUID agencyId) {
-        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        return renderJobCardsPdf(jobId, agencyId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobCardsPdf(UUID jobId, UUID agencyId, List<UUID> studentIds) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId, studentIds);
         return cardPdfRenderingService.renderBatchPdf(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session());
     }
 
     @Transactional(readOnly = true)
     public byte[] renderJobA4SheetPdf(UUID jobId, UUID agencyId) {
-        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        return renderJobA4SheetPdf(jobId, agencyId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobA4SheetPdf(UUID jobId, UUID agencyId, List<UUID> studentIds) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId, studentIds);
         return cardPdfRenderingService.renderA4SheetPdf(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session());
     }
 
     @Transactional(readOnly = true)
     public byte[] renderJobA4SheetImage(UUID jobId, UUID agencyId, String side) {
-        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        return renderJobA4SheetImage(jobId, agencyId, side, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobA4SheetImage(UUID jobId, UUID agencyId, String side, List<UUID> studentIds) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId, studentIds);
         return cardPdfRenderingService.renderA4SheetImage(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session(), side);
     }
 
     @Transactional(readOnly = true)
     public byte[] renderJobImagesZip(UUID jobId, UUID agencyId) {
-        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId);
+        return renderJobImagesZip(jobId, agencyId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderJobImagesZip(UUID jobId, UUID agencyId, List<UUID> studentIds) {
+        JobRenderContext ctx = loadJobRenderContext(jobId, agencyId, studentIds);
         return cardPdfRenderingService.renderJobImagesZip(ctx.template(), ctx.version(), ctx.students(), ctx.school(), ctx.session());
     }
 

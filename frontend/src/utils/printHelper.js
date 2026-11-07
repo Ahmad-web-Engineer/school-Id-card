@@ -1,7 +1,7 @@
 import api from '../services/api';
 
 /**
- * Direct Print a PDF or Image from an API URL using a hidden iframe with fallback to print window.
+ * Direct Print a PDF or Image from an API URL using a hidden iframe with fallback to clean window.
  * Triggers the browser/system print dialog directly without requiring file downloads.
  */
 export async function directPrintUrl(endpointUrl, docTitle = 'Print Document') {
@@ -27,6 +27,44 @@ export async function directPrintUrl(endpointUrl, docTitle = 'Print Document') {
     }
   } catch (error) {
     console.error('Direct print failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Opens an API endpoint (PDF or Image) directly in a new browser tab for immediate viewing & printing.
+ */
+export async function openPdfInNewTab(endpointUrl) {
+  try {
+    const cleanUrl = endpointUrl.startsWith('/api/v1')
+      ? endpointUrl.substring('/api/v1'.length)
+      : endpointUrl;
+
+    const res = await api.get(cleanUrl, {
+      responseType: 'blob',
+      timeout: 180000,
+    });
+
+    const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' });
+    const blobUrl = window.URL.createObjectURL(blob);
+    const win = window.open(blobUrl, '_blank');
+    if (win) {
+      win.focus();
+    } else {
+      // If popup blocker intervened, fallback to downloading
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', 'print_document.pdf');
+      document.body.appendChild(link);
+      link.click();
+    }
+
+    setTimeout(() => {
+      window.URL.revokeObjectURL(blobUrl);
+    }, 120000);
+    return true;
+  } catch (error) {
+    console.error('Failed to open PDF in new tab:', error);
     throw error;
   }
 }
@@ -145,3 +183,5 @@ function printPdfBlob(blobUrl, docTitle) {
     }, 120000);
   });
 }
+
+export default directPrintUrl;

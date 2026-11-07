@@ -20,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -83,9 +84,12 @@ public class AgencyJobController {
 
     @GetMapping("/{id}/print-pdf")
     @Operation(summary = "Download print-ready cards PDF", description = "Generates high-resolution multi-page PDF with student cards for printing")
-    public ResponseEntity<byte[]> downloadJobPrintPdf(@PathVariable UUID id) {
+    public ResponseEntity<byte[]> downloadJobPrintPdf(
+            @PathVariable UUID id,
+            @RequestParam(required = false) List<UUID> studentIds
+    ) {
         UUID agencyId = SecurityUtils.getRequiredAgencyId();
-        byte[] pdfBytes = agencyJobService.renderJobCardsPdf(id, agencyId);
+        byte[] pdfBytes = agencyJobService.renderJobCardsPdf(id, agencyId, studentIds);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"job_cards_" + id + ".pdf\"")
@@ -135,7 +139,8 @@ public class AgencyJobController {
             @RequestParam(required = false) String printMode,
             @RequestParam(required = false) Boolean showCropMarks,
             @RequestParam(required = false) Boolean showCutGuides,
-            @RequestParam(required = false) Boolean autoCenter
+            @RequestParam(required = false) Boolean autoCenter,
+            @RequestParam(required = false) List<UUID> studentIds
     ) {
         UUID agencyId = SecurityUtils.getRequiredAgencyId();
         AgencyJobDetailResponse detail = agencyJobService.getAgencyJobById(id, agencyId);
@@ -158,7 +163,7 @@ public class AgencyJobController {
             );
         }
 
-        byte[] pdfBytes = agencyJobService.renderJobCustomImpositionPdf(id, agencyId, override);
+        byte[] pdfBytes = agencyJobService.renderJobCustomImpositionPdf(id, agencyId, override, studentIds);
         String filename = "job_" + detail.jobNumber() + "_sheet.pdf";
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
@@ -215,11 +220,12 @@ public class AgencyJobController {
     @Operation(summary = "Download direct plastic card PDF", description = "Generates print-ready PDF for CR80 PVC thermal card printers (1 card per page)")
     public ResponseEntity<byte[]> downloadJobPlasticCardsPdf(
             @PathVariable UUID id,
-            @RequestParam(defaultValue = "DUPLEX") String sides
+            @RequestParam(defaultValue = "DUPLEX") String sides,
+            @RequestParam(required = false) List<UUID> studentIds
     ) {
         UUID agencyId = SecurityUtils.getRequiredAgencyId();
         AgencyJobDetailResponse detail = agencyJobService.getAgencyJobById(id, agencyId);
-        byte[] pdfBytes = agencyJobService.renderJobPlasticCardsPdf(id, agencyId, sides);
+        byte[] pdfBytes = agencyJobService.renderJobPlasticCardsPdf(id, agencyId, sides, studentIds);
         String filename = "job_" + detail.jobNumber() + "_plastic_cr80.pdf";
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
@@ -229,10 +235,13 @@ public class AgencyJobController {
 
     @GetMapping("/{id}/print-a4-sheet")
     @Operation(summary = "Download A4 imposition sheet PDF", description = "Generates multi-page A4 imposition sheet PDF with duplex column mirroring for production printing")
-    public ResponseEntity<byte[]> downloadJobA4SheetPdf(@PathVariable UUID id) {
+    public ResponseEntity<byte[]> downloadJobA4SheetPdf(
+            @PathVariable UUID id,
+            @RequestParam(required = false) List<UUID> studentIds
+    ) {
         UUID agencyId = SecurityUtils.getRequiredAgencyId();
         AgencyJobDetailResponse detail = agencyJobService.getAgencyJobById(id, agencyId);
-        byte[] pdfBytes = agencyJobService.renderJobA4SheetPdf(id, agencyId);
+        byte[] pdfBytes = agencyJobService.renderJobA4SheetPdf(id, agencyId, studentIds);
         String filename = "job_" + detail.jobNumber() + "_a4_sheet.pdf";
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
@@ -258,10 +267,13 @@ public class AgencyJobController {
 
     @GetMapping("/{id}/download-images")
     @Operation(summary = "Download high-resolution JPEG images ZIP", description = "Exports 300 DPI JPEG cards in a zip archive")
-    public ResponseEntity<byte[]> downloadJobImagesZip(@PathVariable UUID id) {
+    public ResponseEntity<byte[]> downloadJobImagesZip(
+            @PathVariable UUID id,
+            @RequestParam(required = false) List<UUID> studentIds
+    ) {
         UUID agencyId = SecurityUtils.getRequiredAgencyId();
         AgencyJobDetailResponse detail = agencyJobService.getAgencyJobById(id, agencyId);
-        byte[] zipBytes = agencyJobService.renderJobImagesZip(id, agencyId);
+        byte[] zipBytes = agencyJobService.renderJobImagesZip(id, agencyId, studentIds);
         String filename = "job_" + detail.jobNumber() + "_cards_jpeg.zip";
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("application/zip"))
